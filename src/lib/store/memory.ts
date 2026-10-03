@@ -46,16 +46,17 @@ export const memoryStore: Store = {
     const d = current()
     const log = d.logs.find((l) => l.id === logId)
     if (!log) throw new Error("Log entry not found")
-    if (patch.note != null) log.note = patch.note
     if (patch.minutes != null) {
       const event = d.events.find((e) => e.id === log.eventId)
       if (event) {
         const before = event.actualMinutes
+        if (before + patch.minutes - log.minutes < 0) throw new Error("This edit would make the block's logged time negative. Adjust its removal entries first.")
         event.actualMinutes = Math.max(0, before + patch.minutes - log.minutes)
         event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
       }
       log.minutes = patch.minutes
     }
+    if (patch.note != null) log.note = patch.note
     return snapshot(d)
   },
 
@@ -65,6 +66,7 @@ export const memoryStore: Store = {
     if (!log) throw new Error("Log entry not found")
     const event = d.events.find((e) => e.id === log.eventId)
     if (event) {
+      if (event.actualMinutes - log.minutes < 0) throw new Error("Deleting this entry would make the block's logged time negative. Adjust its removal entries first.")
       event.actualMinutes = Math.max(0, event.actualMinutes - log.minutes)
       event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
     }

@@ -77,7 +77,7 @@ Creating an assignment is the **New assignment** button in the header (top right
 
 - Log time with the quick buttons or a custom amount: `2.75` (hours), `1:30`, `1h 30m`, or minutes, with Add or Remove. `parseDuration` does the parsing. One entry is capped at `MAX_LOG_MINUTES` (12 hours, in `time.ts`) on the client and in the API. Removing more than the block's logged time is blocked; the store also clamps `actual_minutes` at 0. Status follows `statusForActual` (`schedule.ts`): 0 → `planned`, under length → `partial`, otherwise `completed`.
 - Removals are stored as negative `time_logs` rows, so totals stay a plain sum.
-- The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference.
+- The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference. Edits and deletions that would make the total negative are rejected: adjust later removal entries first. Neon updates the block and its ledger atomically.
 - Marking a task done shows a highlighted "how far along is the assignment now?" slider when the block belongs to an unfinished assignment.
 - Blocks do not need an assignment. A work block with no task can still log time (no `time_logs` row, since logs need a task) and has a "Mark done" button.
 - `estimateProject` returns `uncertain: true` when progress is 0% but at least 2 hours are logged. The UI shows the "can't give an accurate estimate yet" sentence instead of a number.
@@ -109,7 +109,7 @@ A newly pinned assignment goes to the end of the pinned list (`pin_order` = max 
 
 `events`: `date` is `YYYY-MM-DD`, `start_min` / `end_min` are minutes from local midnight. This is timezone-agnostic on purpose. `actual_minutes` is what was logged. `kind` is `work` or `life`. `moved_from_*` records the first time a block was moved.
 
-`time_logs` is append-only. `check_ins` is one row per user per date, rating 1–10.
+`time_logs` stores signed entries that can be edited or deleted. Their sum must stay consistent with the linked block's actual time. `check_ins` is one row per user per date, rating 1–10.
 
 Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements plus the category migration at the bottom of `schema.sql` (`studying` → `exam`, `writing` → `project`, drop the old `projects_type_check`).
 
@@ -197,6 +197,7 @@ npm install
 cp .env.example .env.local   # optional
 npm run dev                  # http://localhost:4317
 npx tsc --noEmit
+npm test                     # regression tests for core behavior
 npm run lint
 ```
 

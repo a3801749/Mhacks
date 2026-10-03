@@ -269,7 +269,7 @@ function LogTime({ event, api }: { event: CalendarEvent; api: WeekApi }) {
             {busy === `q${m}` && <Loader2 className="animate-spin" />}+{m}m
           </Button>
         ))}
-        {remainingInBlock > 0 && (
+        {remainingInBlock > 0 && remainingInBlock <= MAX_LOG_MINUTES && (
           <Button size="sm" disabled={busy !== null} onClick={() => log("whole", remainingInBlock)}>
             {busy === "whole" && <Loader2 className="animate-spin" />}
             Did the whole block

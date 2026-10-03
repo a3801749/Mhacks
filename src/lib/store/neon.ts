@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs"
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
 import { buildSeed } from "../seed"
-import { applyChanges, statusForActual } from "../schedule"
+import { applyChanges } from "../schedule"
 import type { CalendarEvent, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 
@@ -81,14 +82,6 @@ function insertEvent(sql: Sql, e: CalendarEvent) {
                date = EXCLUDED.date, start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min,
                status = EXCLUDED.status, moved_from_date = EXCLUDED.moved_from_date,
                moved_from_start_min = EXCLUDED.moved_from_start_min`
-}
-
-async function shiftActual(sql: Sql, eventId: string, delta: number) {
-  const [event] = await sql`SELECT actual_minutes, end_min - start_min AS length FROM events WHERE id = ${eventId}`
-  if (!event) return
-  const actual = Math.max(0, event.actual_minutes + delta)
-  await sql`UPDATE events SET actual_minutes = ${actual}, status = ${statusForActual(actual, event.length)}
-            WHERE id = ${eventId}`
 }
 
 async function load(): Promise<WeekData> {
@@ -184,43 +177,85 @@ export const neonStore: Store = {
 
   async logTime(eventId, minutes, note) {
     const { sql } = client()
-    const [event] = await sql`SELECT task_id, actual_minutes, end_min - start_min AS length
-                              FROM events WHERE id = ${eventId} AND user_id = ${USER_ID}`
-    if (!event) throw new Error("Event not found")
-    const actual = Math.max(0, event.actual_minutes + minutes)
-    const applied = actual - event.actual_minutes
-    await sql`UPDATE events SET actual_minutes = ${actual}, status = ${statusForActual(actual, event.length)}
-              WHERE id = ${eventId}`
-    if (event.task_id && applied !== 0) {
-      await sql`INSERT INTO time_logs (id, task_id, event_id, minutes, note)
-                VALUES (${`l-${Date.now().toString(36)}`}, ${event.task_id}, ${eventId}, ${applied}, ${note})`
-    }
+    // Lock the block and commit its total and ledger entry in one statement.
+    const rows = await sql`
+      WITH event AS (
+        SELECT id, task_id, actual_minutes, end_min - start_min AS length FROM events
+        WHERE id = ${eventId} AND user_id = ${USER_ID} FOR UPDATE
+      ), totals AS (
+        SELECT event.*, GREATEST(0, actual_minutes + ${minutes}) AS actual FROM event
+      ), changed AS (
+        UPDATE events e SET actual_minutes = totals.actual,
+          status = CASE WHEN totals.actual = 0 THEN 'planned'
+                        WHEN totals.actual >= totals.length THEN 'completed' ELSE 'partial' END
+        FROM totals WHERE e.id = totals.id
+        RETURNING e.id, e.task_id, totals.actual - totals.actual_minutes AS applied
+      ), logged AS (
+        INSERT INTO time_logs (id, task_id, event_id, minutes, note)
+        SELECT ${`l-${randomUUID()}`}, task_id, id, applied, ${note} FROM changed
+        WHERE task_id IS NOT NULL AND applied <> 0
+        RETURNING id
+      ) SELECT id FROM changed`
+    if (rows.length === 0) throw new Error("Event not found")
     return load()
   },
 
   async updateLog(logId, patch) {
     const { sql } = client()
-    const [log] = await sql`
-      SELECT l.minutes, l.event_id FROM time_logs l
-      JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
-      WHERE l.id = ${logId} AND p.user_id = ${USER_ID}`
-    if (!log) throw new Error("Log entry not found")
-    if (patch.minutes != null && log.event_id) await shiftActual(sql, log.event_id, patch.minutes - log.minutes)
-    await sql`UPDATE time_logs SET minutes = COALESCE(${patch.minutes ?? null}::int, minutes),
-                                   note = COALESCE(${patch.note ?? null}, note)
-              WHERE id = ${logId}`
+    const [result] = await sql`
+      WITH entry AS (
+        SELECT l.id, l.minutes, l.event_id FROM time_logs l
+        JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
+        WHERE l.id = ${logId} AND p.user_id = ${USER_ID} FOR UPDATE OF l
+      ), event AS (
+        SELECT e.id, e.actual_minutes, e.end_min - e.start_min AS length FROM events e
+        JOIN entry ON entry.event_id = e.id FOR UPDATE OF e
+      ), changed AS (
+        UPDATE time_logs l SET minutes = COALESCE(${patch.minutes ?? null}::int, l.minutes),
+          note = COALESCE(${patch.note ?? null}, l.note)
+        FROM entry WHERE l.id = entry.id AND NOT EXISTS (
+          SELECT 1 FROM event WHERE actual_minutes + COALESCE(${patch.minutes ?? null}::int, entry.minutes) - entry.minutes < 0
+        )
+        RETURNING l.id, l.event_id, l.minutes - entry.minutes AS delta
+      ), totals AS (
+        SELECT event.*, GREATEST(0, event.actual_minutes + changed.delta) AS actual
+        FROM event JOIN changed ON changed.event_id = event.id
+      ), shifted AS (
+        UPDATE events e SET actual_minutes = totals.actual,
+          status = CASE WHEN totals.actual = 0 THEN 'planned'
+                        WHEN totals.actual >= totals.length THEN 'completed' ELSE 'partial' END
+        FROM totals WHERE e.id = totals.id RETURNING e.id
+      ) SELECT (SELECT id FROM entry) AS id, EXISTS (SELECT 1 FROM changed) AS applied`
+    if (!result.id) throw new Error("Log entry not found")
+    if (!result.applied) throw new Error("This edit would make the block's logged time negative. Adjust its removal entries first.")
     return load()
   },
 
   async deleteLog(logId) {
     const { sql } = client()
-    const [log] = await sql`
-      SELECT l.minutes, l.event_id FROM time_logs l
-      JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
-      WHERE l.id = ${logId} AND p.user_id = ${USER_ID}`
-    if (!log) throw new Error("Log entry not found")
-    if (log.event_id) await shiftActual(sql, log.event_id, -log.minutes)
-    await sql`DELETE FROM time_logs WHERE id = ${logId}`
+    const [result] = await sql`
+      WITH entry AS (
+        SELECT l.id, l.minutes, l.event_id FROM time_logs l
+        JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
+        WHERE l.id = ${logId} AND p.user_id = ${USER_ID} FOR UPDATE OF l
+      ), event AS (
+        SELECT e.id, e.actual_minutes, e.end_min - e.start_min AS length FROM events e
+        JOIN entry ON entry.event_id = e.id FOR UPDATE OF e
+      ), removed AS (
+        DELETE FROM time_logs l USING entry WHERE l.id = entry.id AND NOT EXISTS (
+          SELECT 1 FROM event WHERE actual_minutes - entry.minutes < 0
+        ) RETURNING l.id, l.event_id, l.minutes
+      ), totals AS (
+        SELECT event.*, GREATEST(0, event.actual_minutes - removed.minutes) AS actual
+        FROM event JOIN removed ON removed.event_id = event.id
+      ), shifted AS (
+        UPDATE events e SET actual_minutes = totals.actual,
+          status = CASE WHEN totals.actual = 0 THEN 'planned'
+                        WHEN totals.actual >= totals.length THEN 'completed' ELSE 'partial' END
+        FROM totals WHERE e.id = totals.id RETURNING e.id
+      ) SELECT (SELECT id FROM entry) AS id, EXISTS (SELECT 1 FROM removed) AS applied`
+    if (!result.id) throw new Error("Log entry not found")
+    if (!result.applied) throw new Error("Deleting this entry would make the block's logged time negative. Adjust its removal entries first.")
     return load()
   },
 

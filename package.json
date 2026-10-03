@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "tsc -p tests/tsconfig.json && node --test .next/tests/tests/*.test.js",
     "dev": "next dev -p 4317",
     "build": "next build",
     "start": "next start -p 4317",
