@@ -17,19 +17,19 @@ onboarding, clear the flag first: in the browser console, run `localStorage.remo
 
 - Click **Start tour** on the banner.
 - **Guidance:** pick **Lighthouse**. Point out that you choose up front how much the AI may change your calendar.
-- **Extras:** show the three previews. Linger on **Screen time**: "A 2-hour block was really 1h 24m on task and
-  22 minutes of YouTube and Instagram. Andy logs the real number." (Coming soon; this is sample data.)
+- **Extras:** show the three previews. Linger on **Screen time**: "The planned extension would distinguish on-task
+  time from distractions within a study block." Point out that this is sample data for a future feature.
 - **First assignment:** add `EECS 281 · Homework 8`, course `EECS 281`, type Homework. Point out the tagging.
-- **Tour:** quickly read the four cards, then click **Take me to Today**.
+- **Tour:** quickly read the five cards, then click **Take me to Today**.
 
 ### 3. Today (45s) — `/`
 
 - "Looking back first": click a past day in the strip. Point out the planned vs. actual bars and skipped blocks.
 - Open a work block: **"You're not starting from zero"**, plus the progress trail.
-- Drag **How far along is EECS 281 · Project 4?** and point out the estimate changing: it blends your pace with how
-  long past EECS projects took.
-- Click **Compile my week** for patterns, one-click shifts, and questions. Note that the AI doesn't reflect for you;
-  the questions are for you.
+- Mark a task done, then drag **How far along is EECS 281 · Project 4?** and save progress. Point out the estimate
+  changing: it blends your pace with how long past EECS projects took.
+- **Insights** loads automatically with patterns, suggested shifts, and questions. Use **Refresh** to request a new
+  reading. Note that the AI compiles what happened; the questions are for you to reflect on.
 
 ### 4. Tilly (40s)
 
@@ -64,7 +64,7 @@ onboarding, clear the flag first: in the browser console, run `localStorage.remo
 
 | Sponsor | Where to point |
 | --- | --- |
-| Gemini | Compile my week, Tilly's replies, Plan breakdowns (`src/lib/ai/prompts.ts`) |
+| Gemini | Insights, Tilly's replies, Plan breakdowns (`src/lib/ai/prompts.ts`) |
 | ElevenLabs | Tilly's voice (`/api/tts`, `src/lib/voice.ts`) |
 | Neon | `db/schema.sql`: events (planned vs. actual), time_logs, check_ins |
 | Figma | The UI itself; tokens in `src/app/globals.css` |

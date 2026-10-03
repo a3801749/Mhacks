@@ -46,7 +46,7 @@ Priority (`Project.priority`) is how the work is graded, not a 1–5 rank:
 | `/plan` | Plan | `planner-view.tsx` | Week grid. Drag a block (tap on touch) and Tilly suggests a breakdown. |
 | `/rhythm` | Rhythm | `rhythm-view.tsx` | Midnight-to-midnight histogram of logged work, week or month, grouped by assignment, course, or category. |
 | `/timeline` | Timeline | `timeline-view.tsx` | Gantt from assigned date to due date. Fill starts the day work actually began. |
-| `/welcome` | (linked, not in nav) | `onboarding-view.tsx` | Five steps: Welcome, Guidance, Extras, First assignment, Tour. |
+| `/welcome` | (linked, not in nav) | `onboarding-view.tsx` | Five steps: Welcome, Guidance, Extras, First assignment, Tour of all five views. Settings saves must succeed before advancing. |
 
 Shell, nav, "New assignment" button, Tilly button, and the dialogs live in `src/components/app/app-shell.tsx`. Pages under `src/app/(app)/` only render a view; the `(app)` layout wraps them in `AppShell`.
 

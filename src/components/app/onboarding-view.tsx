@@ -14,6 +14,7 @@ import {
   GanttChart,
   History,
   Layers,
+  ListTodo,
   Loader2,
   MessageCircleHeart,
   Sun,
@@ -47,15 +48,18 @@ export function OnboardingView() {
   const [saving, setSaving] = useState(false)
 
   const next = async () => {
+    if (saving) return
     if (step === 1 && mode !== data.settings.guidanceMode) {
       setSaving(true)
-      await api.updateSettings({ guidanceMode: mode })
+      const saved = await api.updateSettings({ guidanceMode: mode })
       setSaving(false)
+      if (!saved) return
     }
     if (step === 2) {
       setSaving(true)
-      await api.updateSettings({ checkInEnabled: checkIn, aiPlannerEnabled: planner })
+      const saved = await api.updateSettings({ checkInEnabled: checkIn, aiPlannerEnabled: planner })
       setSaving(false)
+      if (!saved) return
     }
     setStep((s) => Math.min(STEPS.length - 1, s + 1))
   }
@@ -86,7 +90,7 @@ export function OnboardingView() {
 
       {step < 4 && (
         <div className="mt-8 flex items-center justify-between gap-3">
-          <Button variant="ghost" onClick={() => (step === 0 ? finish() : setStep(step - 1))}>
+          <Button variant="ghost" disabled={saving} onClick={() => (step === 0 ? finish() : setStep(step - 1))}>
             {step === 0 ? (
               "Skip setup"
             ) : (
@@ -391,12 +395,23 @@ const TOUR = [
     href: "/",
     icon: Sun,
     title: "Today",
-    what: "Your last few days and the next couple, as calm cards instead of a grid.",
+    what: "The last three days, today, and the next three, with a timeline for each day.",
     how: [
       "Tap a block to log time and see everything you've put into that task.",
-      "Slide “how far along are you?” after a block — estimates update from your pace.",
+      "Mark a task done, then report how far along the assignment is — estimates update from your pace.",
       "Rate the day 1–10 at the bottom, if you turned check-ins on.",
-      "Hit “Compile my week” on the right for a reflection you didn't have to write.",
+      "Insights load automatically: patterns, suggested shifts, and questions for you to reflect on.",
+    ],
+  },
+  {
+    href: "/agenda",
+    icon: ListTodo,
+    title: "Agenda",
+    what: "Every assignment and upcoming event, with a month calendar showing how busy each day is.",
+    how: [
+      "Filter by class or category and sort assignments by what's due or needs attention.",
+      "Pick a day to see its blocks and deadlines.",
+      "Use “Schedule event” to add a focus block or a life event.",
     ],
   },
   {
@@ -438,7 +453,7 @@ function TourStep({ onFinish }: { onFinish: (href?: string) => void }) {
   return (
     <>
       <StepHeader eyebrow="You're set" title={`Here's how ${APP_NAME} works`}>
-        Four views, one assistant. The demo week is loaded so everything has something to show.
+        Five views, one assistant. The demo week is loaded so everything has something to show.
       </StepHeader>
       <div className="grid gap-3 sm:grid-cols-2">
         {TOUR.map((t, i) => (
