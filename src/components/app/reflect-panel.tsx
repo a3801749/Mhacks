@@ -1,15 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowRight, Check, Lightbulb, Loader2, NotebookPen, RefreshCw, Sparkle, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { backtrack } from "@/lib/analytics"
 import { describeChange } from "@/lib/describe"
-import { formatDuration, weekdayShort } from "@/lib/time"
+import { createInsightCache, insightKey } from "@/lib/insights"
+import { formatDuration, nowMinutes, weekdayShort } from "@/lib/time"
 import type { Reflection, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { request, type WeekApi } from "@/hooks/use-week"
+
+interface InsightResult {
+  key: string
+  version: number
+  reflection?: Reflection
+  error?: string
+  applied: Set<number>
+}
 
 export function ReflectPanel({
   data,
@@ -23,32 +32,35 @@ export function ReflectPanel({
   className?: string
 }) {
   const stats = backtrack(data, today)
-  const [reflection, setReflection] = useState<Reflection | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [applied, setApplied] = useState<Set<number>>(new Set())
+  const key = insightKey(data, today)
+  const [result, setResult] = useState<InsightResult | null>(null)
+  const [version, setVersion] = useState(0)
+  const [applying, setApplying] = useState(false)
+  const lastRefresh = useRef(0)
+  const current = result?.key === key && result.version === version ? result : null
+  const reflection = current?.reflection
+  const error = current?.error
+  const loading = current === null
+  const applied = current?.applied ?? new Set<number>()
 
   const maxDay = Math.max(1, ...stats.byDay.map((d) => Math.max(d.planned, d.actual)))
 
-  const settle = (p: Promise<Reflection>) =>
-    p
-      .then((r) => {
-        setReflection(r)
-        setApplied(new Set())
-        setError(null)
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't load insights"))
-      .finally(() => setLoading(false))
-
   useEffect(() => {
-    settle(loadInsights(today))
-  }, [today])
+    let active = true
+    const fresh = version !== lastRefresh.current
+    lastRefresh.current = version
+    loadInsights(key, today, fresh).then(
+      (reflection) => {
+        if (active) setResult({ key, version, reflection, applied: new Set() })
+      },
+      (err) => {
+        if (active) setResult({ key, version, error: err instanceof Error ? err.message : "Couldn't load insights", applied: new Set() })
+      },
+    )
+    return () => { active = false }
+  }, [key, today, version])
 
-  const refresh = () => {
-    setLoading(true)
-    setError(null)
-    settle(loadInsights(today, true))
-  }
+  const refresh = () => setVersion((value) => value + 1)
 
   return (
     <section className={cn("space-y-4", className)} aria-labelledby="reflect-heading">
@@ -171,10 +183,17 @@ export function ReflectPanel({
                         <Button
                           size="sm"
                           variant={applied.has(i) ? "ghost" : "outline"}
-                          disabled={applied.has(i)}
+                          disabled={loading || applying || applied.has(i)}
                           onClick={async () => {
-                            const ok = await api.applyChanges([s.change!], "Shift applied")
-                            if (ok) setApplied((prev) => new Set(prev).add(i))
+                            setApplying(true)
+                            try {
+                              const ok = await api.applyChanges([s.change!], "Shift applied")
+                              if (ok) setResult((prev) => prev?.key === key && prev.version === version
+                                ? { ...prev, applied: new Set(prev.applied).add(i) }
+                                : prev)
+                            } finally {
+                              setApplying(false)
+                            }
                           }}
                         >
                           {applied.has(i) ? (
@@ -217,14 +236,11 @@ export function ReflectPanel({
   )
 }
 
-const insightCache = new Map<string, Promise<Reflection>>()
+const insightCache = createInsightCache()
 
 /** Shared across the panel's desktop and mobile instances so one page load is one request. */
-function loadInsights(today: string, fresh = false) {
-  if (fresh || !insightCache.has(today)) {
-    const p = request<Reflection>("/api/reflect", { method: "POST", body: JSON.stringify({ today }) })
-    p.catch(() => insightCache.delete(today))
-    insightCache.set(today, p)
-  }
-  return insightCache.get(today)!
+function loadInsights(key: string, today: string, fresh = false) {
+  return insightCache.load(key, () => request<Reflection>("/api/reflect", {
+    method: "POST", body: JSON.stringify({ today, minute: nowMinutes(new Date()) }),
+  }), fresh)
 }

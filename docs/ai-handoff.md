@@ -84,7 +84,7 @@ Creating an assignment is the **New assignment** button in the header (top right
 
 ## Looking back
 
-`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount (`loadInsights`, cached per `today` so the desktop and mobile copies share one request) and has a Refresh button. There is no "Compile my week" button anymore.
+`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount and after calendar, progress, or settings changes. `insights.ts` caches by date and calendar snapshot so desktop and mobile copies share one request. Superseded responses are ignored. Refresh requests a fresh reflection; the client sends its local minute so expired same-day shifts are excluded. There is no "Compile my week" button anymore.
 
 ## Assignment dialog
 
@@ -162,7 +162,7 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | `/api/plan` | POST | `{ date, startMin, endMin }` → breakdown |
 | `/api/schedule/adjust` | POST | `{ message, history, now }` |
 | `/api/schedule/apply` | POST | `{ changes }` |
-| `/api/reflect` | POST | reflection for `today` |
+| `/api/reflect` | POST | reflection for `{ today, minute }` (client-local time) |
 | `/api/settings` | PUT | partial settings. **`screenTimeEnabled` is forced `false`.** |
 | `/api/tts` | POST | `{ text }` → audio/mpeg, or 501 |
 | `/api/reset` | POST | rebuild the demo week |
