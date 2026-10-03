@@ -24,13 +24,14 @@ Assignment categories (`Project.type`):
 | Exam | `exam` | Old rows with `studying` were migrated to `exam`. |
 | Homework | `homework` | Treated as light work in the planner. |
 | Reading | `reading` | Treated as light work in the planner. |
+| Misc | `misc` | Anything else. No database check on `type`; the API validates against `ASSIGNMENT_TYPES`. |
 
 Priority (`Project.priority`) is how the work is graded, not a 1–5 rank:
 
 | UI | Stored | Planner weight (`PRIORITIES` in `brand.ts`) |
 | --- | --- | --- |
-| Graded on accuracy | `accuracy` | 1.35 |
-| Graded on completion | `completion` | 1 |
+| Accuracy | `accuracy` | 1.35 |
+| Completion | `completion` | 1 |
 | Flexible | `flexible` | 0.8 |
 | Optional | `optional` | 0.5 |
 
@@ -40,7 +41,7 @@ Priority (`Project.priority`) is how the work is graded, not a 1–5 rank:
 
 | Route | Nav label | Component | What the user sees |
 | --- | --- | --- | --- |
-| `/` | Today | `today-view.tsx` | Day strip and timeline (today−4 through today+2), check-in, reflection. Left rail is an **overview**, not a stack of full cards. |
+| `/` | Today | `today-view.tsx` | Seven-day strip centered on today, a proportional day timeline, check-in, Looking back. Left rail is an **overview**, not a stack of full cards. |
 | `/agenda` | Agenda | `agenda-view.tsx` | Filterable assignment/event list plus a month calendar shaded by how busy the day is. Schedule from here. |
 | `/plan` | Plan | `planner-view.tsx` | Week grid. Drag a block (tap on touch) and Tilly suggests a breakdown. |
 | `/rhythm` | Rhythm | `rhythm-view.tsx` | Midnight-to-midnight histogram of logged work, week or month, grouped by assignment, course, or category. |
@@ -53,14 +54,41 @@ Shell, nav, "New assignment" button, Tilly button, and the dialogs live in `src/
 
 `project-rail.tsx` is deliberately compact. It shows:
 
-1. **Classes** — one row per course: open count, next due date, a dot if anything in that course is behind. The row links to `/agenda?course=...`.
-2. **Pinned** — assignments with `pinned`. Empty state tells the user pinning makes Tilly plan them first.
+1. **Classes** — one row per course: number of unfinished tasks ("3 tasks"), next due date, a dot if anything in that course is behind. The row links to `/agenda?course=...`.
+2. **Pinned** — assignments with `pinned`, in `pinOrder`. Drag the grip (pointer events, so mouse and touch) or use arrow keys on it. Saved with `PUT /api/projects/pin-order`. Empty state tells the user pinning makes Tilly plan them first.
 3. **Due soon** — the next few unpinned assignments by due date.
 4. One line when pin history is strong enough: "You pin {course} {category} most…"
+
+The rail has a fixed height on desktop; each section scrolls on its own (`scrollArea` in `project-rail.tsx`, with a stable scrollbar gutter). Do not put a scroll on the whole column.
 
 No estimate paragraphs on these rows. Pace is a short tag: **Done**, **Ahead**, **On pace**, **Behind pace** (`PACE_COPY` in `assignment-bits.tsx`). Progress is a plain bar (`ProgressBar`), not the old animated wave.
 
 Creating an assignment is the **New assignment** button in the header (top right), not a button inside the rail. Editing is the assignment title (Today and Agenda) or the row on Timeline.
+
+## Today body
+
+- `DayStrip` has no progress bars. Day progress (actual ÷ planned work) is a small bar at the bottom right of the day header in `DayTimeline`. The summary sentence has no trailing period.
+- The timeline is proportional: card height is `max(84px, minutes × 1.1px)`, and gaps scale too. Gaps of 30 minutes or more say "Xh of breathing room". Hovering a gap of 15 minutes or more (today after now, or a future day) shows "Add something here", which opens `ScheduleDialog` prefilled with that slot.
+- Every work block shows the planned bar even when nothing has been logged.
+
+## Block dialog
+
+`block-dialog.tsx`.
+
+- Log time with the quick buttons or a custom amount: `2.75` (hours), `1:30`, `1h 30m`, or minutes, with Add or Remove. `parseDuration` does the parsing. One entry is capped at `MAX_LOG_MINUTES` (12 hours, in `time.ts`) on the client and in the API. Removing more than the block's logged time is blocked; the store also clamps `actual_minutes` at 0. Status follows `statusForActual` (`schedule.ts`): 0 → `planned`, under length → `partial`, otherwise `completed`.
+- Removals are stored as negative `time_logs` rows, so totals stay a plain sum.
+- The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference.
+- Marking a task done shows a highlighted "how far along is the assignment now?" slider when the block belongs to an unfinished assignment.
+- Blocks do not need an assignment. A work block with no task can still log time (no `time_logs` row, since logs need a task) and has a "Mark done" button.
+- `estimateProject` returns `uncertain: true` when progress is 0% but at least 2 hours are logged. The UI shows the "can't give an accurate estimate yet" sentence instead of a number.
+
+## Looking back
+
+`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount (`loadInsights`, cached per `today` so the desktop and mobile copies share one request) and has a Refresh button. There is no "Compile my week" button anymore.
+
+## Assignment dialog
+
+No subtitle under the title. Fields: name, course (`CourseField` — free text with a full-width list of every existing course), category, priority, "Estimate (hr)", dates, progress slider (edit only), notes, pin. The bottom line shows the likely total, or the uncertain sentence.
 
 ## Agenda
 
@@ -69,15 +97,15 @@ Creating an assignment is the **New assignment** button in the header (top right
 - Left on desktop, above on mobile: the list. Toggle Assignments / Events. Filter by class and category (multi-select chips). Sort assignments by due date, priority weight, pinned first, least progress, or most time left. "Show finished" includes completed assignments.
 - Right on desktop: month calendar and the selected day's events and due items.
 - Day color is `dayLoad()` in `src/lib/analytics.ts`. Score = booked minutes (skipped blocks excluded) plus a due-date penalty (`accuracy` 120, `completion` 60, `flexible` 40, `optional` 20; exams ×1.5). Levels: `free` 0, `light` under 300, `medium` under 420, `heavy` otherwise. UI: open / green "Okay" / orange "Busy" / red "Packed" (`BUSY_STYLE`). Dots on a cell are things due that day.
-- **Schedule event** opens `ScheduleDialog`. "Work session" creates a block tied to an open task (`kind` becomes `work` because `taskId` is set). "Event" is a life block (`kind: "life"`) with an optional linked assignment. Both go through `POST /api/schedule/apply` with a `create` change. Overlaps are warned about and still allowed.
+- **Schedule event** opens `ScheduleDialog`. "Focus block" is `kind: "work"`; with an assignment it is tied to one of its open tasks, without one it just needs a title. "Event" is `kind: "life"` with an optional linked assignment. Both go through `POST /api/schedule/apply` as a `create` change with an explicit `kind`. Overlaps are warned about and still allowed.
 
 ## Data model
 
-Types: `src/lib/types.ts`. SQL: `db/schema.sql`. The app applies the SQL itself on the first Neon request (`src/lib/store/neon.ts` splits on `;`, then strips `--` comments). Do not put a semicolon inside a SQL comment.
+Types: `src/lib/types.ts`. SQL: `db/schema.sql`. The app applies the SQL itself on the first Neon request (`src/lib/store/neon.ts` strips `--` comments, then splits on `;`). Do not put a semicolon inside a string literal or use `DO $$` blocks.
 
-`projects` (assignments): `course`, `type`, `priority`, `notes` (max 2000 via the API), `pinned`, `pin_count`, `target_minutes`, `assigned_date`, `due_date`, `progress_percent` (null until the user reports it), `completed_date`.
+`projects` (assignments): `course`, `type`, `priority`, `notes` (max 2000 via the API), `pinned`, `pin_count`, `pin_order`, `target_minutes`, `assigned_date`, `due_date`, `progress_percent` (null until the user reports it), `completed_date`.
 
-`pin_count` increments only on the transition from unpinned to pinned (memory store and the Neon `UPDATE`). Un-pinning does not decrement it. That history is what the planner learns from, so do not reset it when the user unpins.
+A newly pinned assignment goes to the end of the pinned list (`pin_order` = max + 1). `pin_count` increments only on the transition from unpinned to pinned (memory store and the Neon `UPDATE`). Un-pinning does not decrement it. That history is what the planner learns from, so do not reset it when the user unpins.
 
 `events`: `date` is `YYYY-MM-DD`, `start_min` / `end_min` are minutes from local midnight. This is timezone-agnostic on purpose. `actual_minutes` is what was logged. `kind` is `work` or `life`. `moved_from_*` records the first time a block was moved.
 
@@ -88,7 +116,7 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 ## Time, windows, pace, estimates
 
 - The client sends `today` and `now`. Do not compute "today" on the server from UTC if a user-facing day is involved.
-- `windowDates(today)` is today−4 through today+2 (`WINDOW_BACK`, `WINDOW_AHEAD`). The Today strip and backtracking stats use this window.
+- `windowDates(today)` is today−3 through today+3 (`WINDOW_BACK`, `WINDOW_AHEAD`), so today is centered. The Today strip and backtracking stats use this window.
 - `projectHealth` pace: `done` when remaining is 0 or percent ≥ 100; `ahead` when upcoming planned minutes cover the estimate; `behind` when ≤4 days remain and less than 60% of the remainder is booked; otherwise `on-track`.
 - `estimateProject`: if the user has reported progress and logged time, blend a pace estimate with the category estimate. The blend trusts pace more as progress passes 50% (`weight = min(1, progress/50)`). Otherwise use the course+type multiplier from finished assignments, then type-only, then the user's original target. Finished assignments are the training set (`completedDate` set).
 - Rhythm wind-down (`rhythmInsights`) ignores today's night. A partial day reads as "wrapping up early" and is a known bug if you include it. Sessions before 4:00 count toward the previous night (`windDownByDay`).
@@ -121,7 +149,9 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | --- | --- | --- |
 | `/api/week?today=` | GET | Full `WeekData` plus integration flags |
 | `/api/events/:id` | PATCH | status, date, startMin, endMin |
-| `/api/events/:id/log` | POST | `{ minutes, note }` — adds to `actual_minutes` and appends a time log |
+| `/api/events/:id/log` | POST | `{ minutes, note }` — ±1 to 720; negative takes time off. Updates `actual_minutes` and appends a time log |
+| `/api/logs/:id` | PATCH / DELETE | Edit `{ minutes, note }` or remove a trail entry; the event's actual time follows |
+| `/api/projects/pin-order` | PUT | `{ ids }` in display order |
 | `/api/tasks/:id` | PATCH | `{ done }` |
 | `/api/projects` | POST | create assignment + first task |
 | `/api/projects/:id` | PATCH | name, course, type, priority, notes, pinned, dates, target, progress, completedDate |

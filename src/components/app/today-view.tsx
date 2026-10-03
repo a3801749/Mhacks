@@ -12,17 +12,19 @@ import { CheckInCard } from "./check-in-card"
 import { DayStrip, DayTimeline } from "./day-view"
 import { ProjectRail } from "./project-rail"
 import { ReflectPanel } from "./reflect-panel"
+import { ScheduleDialog, type ScheduleDraft } from "./schedule-dialog"
 
 export function TodayView() {
   const { data, now, today, api, openBlock, editProject } = useApp()
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null)
   const dates = windowDates(today)
   const day = selectedDay && dates.includes(selectedDay) ? selectedDay : today
 
   const calendar = (
     <div className="space-y-5">
       <DayStrip data={data} dates={dates} today={today} selected={day} onSelect={setSelectedDay} />
-      <DayTimeline data={data} date={day} today={today} nowMinute={now.minute} onOpen={openBlock} />
+      <DayTimeline data={data} date={day} today={today} nowMinute={now.minute} onOpen={openBlock} onAddGap={setDraft} />
       {data.settings.checkInEnabled && day <= today && <CheckInCard date={day} />}
     </div>
   )
@@ -32,7 +34,7 @@ export function TodayView() {
     <>
       <TourBanner />
       <div className="hidden gap-6 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[290px_minmax(0,1fr)_370px]">
-        <aside className="lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:pb-6">
+        <aside className="lg:sticky lg:top-20 lg:flex lg:h-[calc(100dvh-7rem)] lg:flex-col lg:self-start">
           {rail}
         </aside>
         <div className="space-y-8">
@@ -58,6 +60,7 @@ export function TodayView() {
           <ReflectPanel data={data} today={today} api={api} />
         </TabsContent>
       </Tabs>
+      <ScheduleDialog draft={draft} onClose={() => setDraft(null)} />
     </>
   )
 }

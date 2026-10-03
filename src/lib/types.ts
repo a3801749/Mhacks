@@ -4,7 +4,7 @@ export type EventStatus = "planned" | "completed" | "partial" | "skipped"
 
 export type EventKind = "work" | "life"
 
-export type AssignmentType = "project" | "exam" | "homework" | "reading"
+export type AssignmentType = "project" | "exam" | "homework" | "reading" | "misc"
 
 /** How the work is graded, which decides how much care it deserves. */
 export type Priority = "accuracy" | "completion" | "flexible" | "optional"
@@ -20,6 +20,8 @@ export interface Project {
   pinned: boolean
   /** How many times this has ever been pinned; the planner learns from it. */
   pinCount: number
+  /** Position in the user's pinned list; lower comes first. */
+  pinOrder: number
   targetMinutes: number
   assignedDate: string
   dueDate: string
@@ -98,6 +100,8 @@ export interface ScheduleChange {
   title?: string
   taskId?: string | null
   projectId?: string | null
+  /** Defaults to "work" when a task is attached, "life" otherwise. */
+  kind?: EventKind
   reason: string
 }
 

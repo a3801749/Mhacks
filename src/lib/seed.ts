@@ -10,18 +10,18 @@ type ProjectSeed = Omit<Project, "assignedDate" | "dueDate" | "completedDate"> &
 }
 
 const PROJECTS: ProjectSeed[] = [
-  { id: "p-thesis", priority: "accuracy", notes: "Advisor wants the methods draft before our next meeting. Use the 2023 survey data, not the pilot.", pinned: true, pinCount: 2, name: "Thesis · Chapter 3", color: "#6F9E80", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -12, due: 9, progressPercent: 60 },
-  { id: "p-eecs", priority: "accuracy", notes: "Autograder caps at 3 submissions a day — test locally first.", pinned: false, pinCount: 1, name: "EECS 281 · Project 4", color: "#7C83D6", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -8, due: 4, progressPercent: 55 },
-  { id: "p-portfolio", priority: "flexible", notes: "", pinned: false, pinCount: 0, name: "Portfolio refresh", color: "#D99A4E", course: "Personal", type: "project", targetMinutes: h(6), assigned: -6, due: 14, progressPercent: null },
-  { id: "p-hack", priority: "completion", notes: "Demo needs to work offline in case the venue Wi-Fi dies.", pinned: false, pinCount: 0, name: "Hackathon prep", color: "#D9776A", course: "MHacks", type: "project", targetMinutes: h(5), assigned: -3, due: 2, progressPercent: 20 },
-  { id: "p-si", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "SI 206 · Reading 5", color: "#5FA3B8", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -2, due: 3, progressPercent: null },
-  { id: "p-mid", priority: "accuracy", notes: "Covers heaps, hashing and graphs. One double-sided cheat sheet allowed.", pinned: true, pinCount: 3, name: "EECS 281 · Midterm", color: "#B07CC6", course: "EECS 281", type: "exam", targetMinutes: h(6), assigned: -10, due: 6, progressPercent: 15 },
+  { id: "p-thesis", priority: "accuracy", notes: "Advisor wants the methods draft before our next meeting. Use the 2023 survey data, not the pilot.", pinned: true, pinCount: 2, pinOrder: 1, name: "Thesis · Chapter 3", color: "#6F9E80", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -12, due: 9, progressPercent: 60 },
+  { id: "p-eecs", priority: "accuracy", notes: "Autograder caps at 3 submissions a day — test locally first.", pinned: false, pinCount: 1, pinOrder: 0, name: "EECS 281 · Project 4", color: "#7C83D6", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -8, due: 4, progressPercent: 55 },
+  { id: "p-portfolio", priority: "flexible", notes: "", pinned: false, pinCount: 0, pinOrder: 0, name: "Portfolio refresh", color: "#D99A4E", course: "Personal", type: "project", targetMinutes: h(6), assigned: -6, due: 14, progressPercent: null },
+  { id: "p-hack", priority: "completion", notes: "Demo needs to work offline in case the venue Wi-Fi dies.", pinned: false, pinCount: 0, pinOrder: 0, name: "Hackathon prep", color: "#D9776A", course: "MHacks", type: "project", targetMinutes: h(5), assigned: -3, due: 2, progressPercent: 20 },
+  { id: "p-si", priority: "completion", notes: "", pinned: false, pinCount: 0, pinOrder: 0, name: "SI 206 · Reading 5", color: "#5FA3B8", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -2, due: 3, progressPercent: null },
+  { id: "p-mid", priority: "accuracy", notes: "Covers heaps, hashing and graphs. One double-sided cheat sheet allowed.", pinned: true, pinCount: 3, pinOrder: 0, name: "EECS 281 · Midterm", color: "#B07CC6", course: "EECS 281", type: "exam", targetMinutes: h(6), assigned: -10, due: 6, progressPercent: 15 },
 
-  { id: "p-ch2", priority: "accuracy", notes: "", pinned: false, pinCount: 1, name: "Thesis · Chapter 2", color: "#8DB59A", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -40, due: -13, completed: -14, progressPercent: 100 },
-  { id: "p-eecs3", priority: "accuracy", notes: "", pinned: false, pinCount: 2, name: "EECS 281 · Project 3", color: "#9EA3E0", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -35, due: -15, completed: -16, progressPercent: 100 },
-  { id: "p-hw6", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "EECS 281 · Homework 6", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -30, due: -22, completed: -23, progressPercent: 100 },
-  { id: "p-hw7", priority: "completion", notes: "", pinned: false, pinCount: 1, name: "EECS 281 · Homework 7", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -22, due: -14, completed: -15, progressPercent: 100 },
-  { id: "p-read4", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "SI 206 · Reading 4", color: "#86BCCB", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -25, due: -19, completed: -20, progressPercent: 100 },
+  { id: "p-ch2", priority: "accuracy", notes: "", pinned: false, pinCount: 1, pinOrder: 0, name: "Thesis · Chapter 2", color: "#8DB59A", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -40, due: -13, completed: -14, progressPercent: 100 },
+  { id: "p-eecs3", priority: "accuracy", notes: "", pinned: false, pinCount: 2, pinOrder: 0, name: "EECS 281 · Project 3", color: "#9EA3E0", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -35, due: -15, completed: -16, progressPercent: 100 },
+  { id: "p-hw6", priority: "completion", notes: "", pinned: false, pinCount: 0, pinOrder: 0, name: "EECS 281 · Homework 6", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -30, due: -22, completed: -23, progressPercent: 100 },
+  { id: "p-hw7", priority: "completion", notes: "", pinned: false, pinCount: 1, pinOrder: 0, name: "EECS 281 · Homework 7", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -22, due: -14, completed: -15, progressPercent: 100 },
+  { id: "p-read4", priority: "completion", notes: "", pinned: false, pinCount: 0, pinOrder: 0, name: "SI 206 · Reading 4", color: "#86BCCB", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -25, due: -19, completed: -20, progressPercent: 100 },
 ]
 
 export const SEED_TASKS: Task[] = [
@@ -62,7 +62,7 @@ interface Template {
   note?: string
 }
 
-// The visible window: four days back for reflection, two days forward for planning.
+// Today sits in the middle of a seven-day window; -4 falls just outside it as history.
 // Patterns baked in for the analysis to find: mornings stick, late-evening blocks slip,
 // and EECS work consistently runs over its estimates.
 const TEMPLATES: Template[] = [

@@ -10,16 +10,16 @@ The AI doesn't do the reflecting for you — it compiles the numbers so reflecti
 
 | Page / feature | What it does | Where |
 | --- | --- | --- |
-| **Today** | Rolling window (4 days back, today, 2 ahead), calm block cards, planned-vs-actual fill, live *now* line. The left rail is a compact overview: classes, pinned assignments, and what is due soon | `today-view.tsx`, `day-view.tsx`, `project-rail.tsx` |
+| **Today** | Seven days centered on today. A proportional day timeline with planned-vs-actual bars, a live *now* line, and hover-to-add in the gaps. The left rail is a compact overview: classes, drag-to-reorder pinned assignments, and what is due soon; each section scrolls on its own | `today-view.tsx`, `day-view.tsx`, `project-rail.tsx` |
 | **Agenda** | All assignments and events, filtered by class and category and sorted by due date, priority, pins, progress, or time left. Month calendar shaded green / orange / red by how busy the day is. Schedule a work session or event from the day | `agenda-view.tsx`, `schedule-dialog.tsx` |
-| **Assignments** | Course, category (project, exam, homework, reading), and priority (accuracy, completion, flexible, optional). Notes, pin, assigned/due dates, adaptive estimates | `project-dialog.tsx`, `assignment-bits.tsx` |
-| **Task-integrated blocks** | Open a block to see total time on the task, the progress trail, quick-log buttons, and "how far along are you?" | `block-dialog.tsx` |
+| **Assignments** | Course, category (project, exam, homework, reading, misc), and priority (accuracy, completion, flexible, optional). Notes, pin, assigned/due dates, adaptive estimates | `project-dialog.tsx`, `assignment-bits.tsx` |
+| **Task-integrated blocks** | Open a block to see total time on the task, log or take off any amount (up to 12h at a time), edit the progress trail, and update how far along the assignment is | `block-dialog.tsx` |
 | **Adaptive estimates** | Time left comes from your reported progress and pace, blended with how long finished assignments of the same course + type really took | `estimateProject()` in `src/lib/analytics.ts` |
 | **Daily check-in** (opt-in) | One tap, 1–10, once a day. Feeds "after late nights you rate your day 4.4 vs 7.2" style insights | `check-in-card.tsx`, `moodCorrelation()` |
 | **Plan** | Week grid: drag out a block (tap on mobile) and Tilly suggests how to split it across your tasks, or pick one task yourself | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
 | **Rhythm** | When in the day you work (midnight → midnight), stacked by assignment, course, or category, over a week or month; wind-down trend; "how long things really take" | `rhythm-view.tsx` |
 | **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, on-pace / behind status | `timeline-view.tsx` |
-| **Backtracking reflection** | Deterministic stats + a Gemini-compiled summary, patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
+| **Looking back** | Planned vs actual by day and time of day, plus Insights that load on their own (Gemini or the local engine) with a refresh button: patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
 | **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead"); Gemini negotiates, ElevenLabs speaks; accept / decline / undo | `voice-agent.tsx` |
 | **Guidance modes** | *Anchor* (strict baseline), *Lighthouse* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
 
@@ -72,7 +72,9 @@ The settings dialog (top-right mode button) shows which services are live and ha
 | --- | --- | --- |
 | `/api/week?today=YYYY-MM-DD` | GET | Projects, tasks, events, logs, settings, integration status |
 | `/api/events/:id` | PATCH | Update status / time |
-| `/api/events/:id/log` | POST | Log `{ minutes, note }` against a block's task |
+| `/api/events/:id/log` | POST | Log `{ minutes, note }` on a block; negative minutes take time off |
+| `/api/logs/:id` | PATCH / DELETE | Edit or remove a progress-trail entry |
+| `/api/projects/pin-order` | PUT | Save pinned order `{ ids }` |
 | `/api/tasks/:id` | PATCH | `{ done }` |
 | `/api/projects` | POST | Create an assignment |
 | `/api/projects/:id` | PATCH | Edit category, priority, notes, pin, dates, estimate, progress, or mark finished |

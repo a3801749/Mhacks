@@ -28,6 +28,7 @@ import { addDays } from "@/lib/time"
 import type { AssignmentType, GuidanceMode } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useApp } from "./app-shell"
+import { CourseField } from "./course-field"
 import { ScreenTimePreview } from "./screen-time-preview"
 import { TillyOrb } from "./voice-agent"
 
@@ -345,12 +346,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ob-course">Course</Label>
-            <Input id="ob-course" list="ob-courses" value={course} onChange={(e) => setCourse(e.target.value)} placeholder="EECS 281" />
-            <datalist id="ob-courses">
-              {courses.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            <CourseField id="ob-course" value={course} onChange={setCourse} courses={courses} />
           </div>
         </div>
         <div className="space-y-1.5">
@@ -373,7 +369,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
         </div>
         <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <div className="space-y-1.5">
-            <Label htmlFor="ob-hours">Your guess (hours)</Label>
+            <Label htmlFor="ob-hours">Estimate (hr)</Label>
             <Input id="ob-hours" type="number" min={0.25} step={0.25} value={hours} onChange={(e) => setHours(e.target.value)} />
           </div>
           <div className="space-y-1.5">

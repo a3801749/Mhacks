@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
 import { buildSeed } from "../seed"
-import { applyChanges } from "../schedule"
+import { applyChanges, statusForActual } from "../schedule"
 import type { CalendarEvent, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 
@@ -25,8 +25,9 @@ async function ensureReady(today: string) {
     c.ready = (async () => {
       const schema = readFileSync(path.join(process.cwd(), "db", "schema.sql"), "utf8")
       const statements = schema
+        .replace(/--.*$/gm, "")
         .split(";")
-        .map((s) => s.replace(/--.*$/gm, "").trim())
+        .map((s) => s.trim())
         .filter(Boolean)
       for (const stmt of statements) await c.sql.query(stmt)
       const rows = await c.sql`SELECT 1 FROM users WHERE id = ${USER_ID}`
@@ -47,10 +48,10 @@ async function seed(sql: Sql, today: string) {
                 ${s.settings.aiPlannerEnabled}, ${s.settings.screenTimeEnabled})`,
     ...s.projects.map(
       (p) =>
-        sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, pinned, pin_count,
+        sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, pinned, pin_count, pin_order,
                                   target_minutes, assigned_date, due_date, progress_percent, completed_date)
             VALUES (${p.id}, ${USER_ID}, ${p.name}, ${p.color}, ${p.course}, ${p.type}, ${p.priority}, ${p.notes},
-                    ${p.pinned}, ${p.pinCount}, ${p.targetMinutes}, ${p.assignedDate}, ${p.dueDate},
+                    ${p.pinned}, ${p.pinCount}, ${p.pinOrder}, ${p.targetMinutes}, ${p.assignedDate}, ${p.dueDate},
                     ${p.progressPercent}, ${p.completedDate})`,
     ),
     ...s.tasks.map(
@@ -82,11 +83,19 @@ function insertEvent(sql: Sql, e: CalendarEvent) {
                moved_from_start_min = EXCLUDED.moved_from_start_min`
 }
 
+async function shiftActual(sql: Sql, eventId: string, delta: number) {
+  const [event] = await sql`SELECT actual_minutes, end_min - start_min AS length FROM events WHERE id = ${eventId}`
+  if (!event) return
+  const actual = Math.max(0, event.actual_minutes + delta)
+  await sql`UPDATE events SET actual_minutes = ${actual}, status = ${statusForActual(actual, event.length)}
+            WHERE id = ${eventId}`
+}
+
 async function load(): Promise<WeekData> {
   const { sql } = client()
   const [users, projects, tasks, events, logs, checkIns] = await Promise.all([
     sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
-    sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, target_minutes, progress_percent,
+    sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, pin_order, target_minutes, progress_percent,
                to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
                to_char(completed_date, 'YYYY-MM-DD') AS completed_date
         FROM projects WHERE user_id = ${USER_ID} ORDER BY id`,
@@ -121,6 +130,7 @@ async function load(): Promise<WeekData> {
         notes: r.notes,
         pinned: r.pinned,
         pinCount: r.pin_count,
+        pinOrder: r.pin_order,
         targetMinutes: r.target_minutes,
         assignedDate: r.assigned_date,
         dueDate: r.due_date,
@@ -174,16 +184,52 @@ export const neonStore: Store = {
 
   async logTime(eventId, minutes, note) {
     const { sql } = client()
-    const rows = await sql`
-      UPDATE events SET
-        actual_minutes = actual_minutes + ${minutes},
-        status = CASE WHEN actual_minutes + ${minutes} >= end_min - start_min THEN 'completed' ELSE 'partial' END
-      WHERE id = ${eventId} AND user_id = ${USER_ID}
-      RETURNING task_id`
-    if (rows.length === 0) throw new Error("Event not found")
-    if (rows[0].task_id) {
+    const [event] = await sql`SELECT task_id, actual_minutes, end_min - start_min AS length
+                              FROM events WHERE id = ${eventId} AND user_id = ${USER_ID}`
+    if (!event) throw new Error("Event not found")
+    const actual = Math.max(0, event.actual_minutes + minutes)
+    const applied = actual - event.actual_minutes
+    await sql`UPDATE events SET actual_minutes = ${actual}, status = ${statusForActual(actual, event.length)}
+              WHERE id = ${eventId}`
+    if (event.task_id && applied !== 0) {
       await sql`INSERT INTO time_logs (id, task_id, event_id, minutes, note)
-                VALUES (${`l-${Date.now().toString(36)}`}, ${rows[0].task_id}, ${eventId}, ${minutes}, ${note})`
+                VALUES (${`l-${Date.now().toString(36)}`}, ${event.task_id}, ${eventId}, ${applied}, ${note})`
+    }
+    return load()
+  },
+
+  async updateLog(logId, patch) {
+    const { sql } = client()
+    const [log] = await sql`
+      SELECT l.minutes, l.event_id FROM time_logs l
+      JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
+      WHERE l.id = ${logId} AND p.user_id = ${USER_ID}`
+    if (!log) throw new Error("Log entry not found")
+    if (patch.minutes != null && log.event_id) await shiftActual(sql, log.event_id, patch.minutes - log.minutes)
+    await sql`UPDATE time_logs SET minutes = COALESCE(${patch.minutes ?? null}::int, minutes),
+                                   note = COALESCE(${patch.note ?? null}, note)
+              WHERE id = ${logId}`
+    return load()
+  },
+
+  async deleteLog(logId) {
+    const { sql } = client()
+    const [log] = await sql`
+      SELECT l.minutes, l.event_id FROM time_logs l
+      JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
+      WHERE l.id = ${logId} AND p.user_id = ${USER_ID}`
+    if (!log) throw new Error("Log entry not found")
+    if (log.event_id) await shiftActual(sql, log.event_id, -log.minutes)
+    await sql`DELETE FROM time_logs WHERE id = ${logId}`
+    return load()
+  },
+
+  async reorderPins(projectIds) {
+    const { sql } = client()
+    if (projectIds.length > 0) {
+      await sql.transaction(
+        projectIds.map((id, i) => sql`UPDATE projects SET pin_order = ${i} WHERE id = ${id} AND user_id = ${USER_ID}`),
+      )
     }
     return load()
   },
@@ -235,6 +281,9 @@ export const neonStore: Store = {
         priority = COALESCE(${patch.priority ?? null}, priority),
         notes = COALESCE(${patch.notes ?? null}, notes),
         pin_count = CASE WHEN ${patch.pinned === true} AND NOT pinned THEN pin_count + 1 ELSE pin_count END,
+        pin_order = CASE WHEN ${patch.pinned === true} AND NOT pinned
+          THEN (SELECT COALESCE(MAX(pin_order), -1) + 1 FROM projects WHERE user_id = ${USER_ID} AND pinned)
+          ELSE pin_order END,
         pinned = COALESCE(${patch.pinned ?? null}::boolean, pinned),
         target_minutes = COALESCE(${patch.targetMinutes ?? null}::int, target_minutes),
         assigned_date = COALESCE(${patch.assignedDate ?? null}::date, assigned_date),

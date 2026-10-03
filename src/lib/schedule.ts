@@ -18,7 +18,7 @@ export function applyChanges(events: CalendarEvent[], changes: ScheduleChange[])
         endMin: change.endMin,
         status: "planned",
         actualMinutes: 0,
-        kind: change.taskId ? "work" : "life",
+        kind: change.kind ?? (change.taskId ? "work" : "life"),
         movedFromDate: null,
         movedFromStartMin: null,
       })
@@ -44,6 +44,12 @@ export function applyChanges(events: CalendarEvent[], changes: ScheduleChange[])
     if (event.endMin <= event.startMin) event.endMin = event.startMin + 15
   }
   return next
+}
+
+/** Status implied by logged time; taking every minute back returns a block to "planned". */
+export function statusForActual(actual: number, length: number): CalendarEvent["status"] {
+  if (actual <= 0) return "planned"
+  return actual >= length ? "completed" : "partial"
 }
 
 /** Finds the earliest open slot of `length` minutes on or after a given day/time, within waking hours. */

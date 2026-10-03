@@ -2,8 +2,8 @@ import { ASSIGNMENT_TYPES, PRIORITIES } from "./brand"
 import { addDays, daysBetween, formatClock, formatDuration } from "./time"
 import type { CalendarEvent, Project, Task, TimeLog, WeekData } from "./types"
 
-export const WINDOW_BACK = 4
-export const WINDOW_AHEAD = 2
+export const WINDOW_BACK = 3
+export const WINDOW_AHEAD = 3
 
 export function windowDates(today: string) {
   const dates: string[] = []
@@ -84,6 +84,8 @@ export interface Estimate {
   total: number
   basis: "pace" | "category" | "target"
   explanation: string
+  /** True when the inputs contradict each other (lots of time logged, progress still 0%). */
+  uncertain?: boolean
 }
 
 export function estimateProject(project: Project, data: WeekData, stats = categoryStats(data)): Estimate {
@@ -92,6 +94,15 @@ export function estimateProject(project: Project, data: WeekData, stats = catego
   const category =
     stats.find((s) => s.key === `${project.course}|${project.type}`) ?? stats.find((s) => s.key === `*|${project.type}`)
 
+  if (p === 0 && logged >= 120) {
+    return {
+      remaining: Math.max(0, project.targetMinutes - logged),
+      total: Math.max(project.targetMinutes, logged),
+      basis: "target",
+      explanation: `Can't give an accurate estimate yet: ${formatDuration(logged)} logged but progress is still at 0%.`,
+      uncertain: true,
+    }
+  }
   if (p != null && p > 0 && logged > 0) {
     const pace = (logged * (100 - p)) / p
     // Early progress reports are noisy, so lean on history until you're further along.
@@ -358,6 +369,7 @@ export const TYPE_COLORS: Record<Project["type"], string> = {
   exam: "#B07CC6",
   homework: "#5FA3B8",
   reading: "#D99A4E",
+  misc: "#A8A29E",
 }
 
 export function groupKey(projectId: string | null, data: WeekData, by: RhythmGroupBy) {

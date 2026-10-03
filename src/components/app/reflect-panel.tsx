@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowRight, Check, Lightbulb, Loader2, NotebookPen, RefreshCw, Sparkles, TriangleAlert } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ArrowRight, Check, Lightbulb, Loader2, NotebookPen, RefreshCw, Sparkle, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { backtrack } from "@/lib/analytics"
@@ -24,24 +24,30 @@ export function ReflectPanel({
 }) {
   const stats = backtrack(data, today)
   const [reflection, setReflection] = useState<Reflection | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [applied, setApplied] = useState<Set<number>>(new Set())
 
-  const followThrough = stats.plannedMinutes ? Math.round((stats.actualMinutes / stats.plannedMinutes) * 100) : 0
   const maxDay = Math.max(1, ...stats.byDay.map((d) => Math.max(d.planned, d.actual)))
 
-  const compile = async () => {
+  const settle = (p: Promise<Reflection>) =>
+    p
+      .then((r) => {
+        setReflection(r)
+        setApplied(new Set())
+        setError(null)
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't load insights"))
+      .finally(() => setLoading(false))
+
+  useEffect(() => {
+    settle(loadInsights(today))
+  }, [today])
+
+  const refresh = () => {
     setLoading(true)
     setError(null)
-    try {
-      setReflection(await request<Reflection>("/api/reflect", { method: "POST", body: JSON.stringify({ today }) }))
-      setApplied(new Set())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't compile your reflection")
-    } finally {
-      setLoading(false)
-    }
+    settle(loadInsights(today, true))
   }
 
   return (
@@ -53,16 +59,6 @@ export function ReflectPanel({
         <span className="text-xs text-muted-foreground">
           {weekdayShort(stats.windowStart)} – {weekdayShort(stats.windowEnd)}
         </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <Stat label="Did" value={formatDuration(stats.actualMinutes)} sub={`of ${formatDuration(stats.plannedMinutes)}`} />
-        <Stat label="Follow-through" value={`${followThrough}%`} sub="time kept" />
-        <Stat
-          label="Blocks landed"
-          value={`${stats.counts.completed}/${stats.counts.total}`}
-          sub={`${stats.counts.partial} partly`}
-        />
       </div>
 
       <div className="rounded-2xl border bg-card p-4">
@@ -106,24 +102,17 @@ export function ReflectPanel({
         </div>
       </div>
 
-      {!reflection && !loading && (
-        <div className="rounded-2xl border border-dashed bg-card/60 p-4">
-          <p className="text-sm">
-            Skip the spreadsheet. Let the AI tally what really happened — you do the reflecting.
-          </p>
-          <Button className="mt-3 w-full" onClick={compile}>
-            <Sparkles /> Compile my week
-          </Button>
-          {error && (
-            <p className="mt-3 flex items-start gap-2 text-sm text-destructive">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" /> {error}
-            </p>
-          )}
-        </div>
-      )}
+      <div className="flex items-center justify-between pt-1">
+        <h2 id="insights-heading" className="font-heading text-lg font-medium">
+          Insights
+        </h2>
+        <Button variant="ghost" size="sm" onClick={refresh} disabled={loading} aria-label="Refresh insights">
+          <RefreshCw className={cn(loading && "animate-spin")} /> Refresh
+        </Button>
+      </div>
 
-      {loading && (
-        <div className="space-y-3 rounded-2xl border bg-card p-4" aria-busy>
+      {loading && !reflection && (
+        <div className="space-y-3 rounded-lg border bg-card p-4" aria-busy>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Reading between the blocks…
           </p>
@@ -133,24 +122,33 @@ export function ReflectPanel({
         </div>
       )}
 
-      {reflection && !loading && (
-        <div className="space-y-4 rounded-2xl border bg-card p-4">
-          <div>
-            <p className="font-heading text-lg leading-snug font-medium">{reflection.headline}</p>
-            <p className="mt-1.5 text-sm text-muted-foreground">{reflection.summary}</p>
+      {error && !loading && (
+        <div className="rounded-lg border border-dashed p-4">
+          <p className="flex items-start gap-2 text-sm text-destructive">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" /> {error}
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={refresh}>
+            Try again
+          </Button>
+        </div>
+      )}
+
+      {reflection && (
+        <div className={cn("space-y-4 transition-opacity", loading && "opacity-50")} aria-labelledby="insights-heading">
+          <div className="rounded-lg border bg-card p-3.5">
+            <p className="font-medium leading-snug">{reflection.headline}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{reflection.summary}</p>
           </div>
 
-          {reflection.habits.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Patterns</h3>
-              {reflection.habits.map((h, i) => (
-                <div key={i} className="rounded-xl bg-secondary/70 p-3">
-                  <p className="text-sm font-medium">{h.title}</p>
-                  <p className="text-sm text-muted-foreground">{h.detail}</p>
-                </div>
-              ))}
+          {reflection.habits.map((h, i) => (
+            <div key={i} className="flex gap-3 rounded-lg border bg-card p-3.5">
+              <Sparkle className="mt-0.5 size-4 shrink-0 text-sky-600" />
+              <div>
+                <p className="text-sm font-medium">{h.title}</p>
+                <p className="text-sm text-muted-foreground">{h.detail}</p>
+              </div>
             </div>
-          )}
+          ))}
 
           {reflection.suggestions.length > 0 && (
             <div className="space-y-2">
@@ -210,24 +208,23 @@ export function ReflectPanel({
             </div>
           )}
 
-          <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-            <span>{reflection.source === "gemini" ? "Compiled by Gemini" : "Compiled locally (demo mode)"}</span>
-            <Button variant="ghost" size="sm" onClick={compile}>
-              <RefreshCw /> Recompile
-            </Button>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            {reflection.source === "gemini" ? "Compiled by Gemini" : "Compiled locally (demo mode)"}
+          </p>
         </div>
       )}
     </section>
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-2xl border bg-card p-3">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="font-heading text-xl font-medium tabular-nums">{value}</p>
-      <p className="text-[11px] text-muted-foreground">{sub}</p>
-    </div>
-  )
+const insightCache = new Map<string, Promise<Reflection>>()
+
+/** Shared across the panel's desktop and mobile instances so one page load is one request. */
+function loadInsights(today: string, fresh = false) {
+  if (fresh || !insightCache.has(today)) {
+    const p = request<Reflection>("/api/reflect", { method: "POST", body: JSON.stringify({ today }) })
+    p.catch(() => insightCache.delete(today))
+    insightCache.set(today, p)
+  }
+  return insightCache.get(today)!
 }

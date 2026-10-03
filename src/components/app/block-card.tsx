@@ -41,8 +41,8 @@ export function BlockCard({
       type="button"
       onClick={onOpen}
       className={cn(
-        "group relative w-full overflow-hidden rounded-2xl border bg-card p-4 text-left transition-all",
-        "hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "group relative flex w-full flex-col overflow-hidden rounded-lg border bg-card p-4 text-left transition-shadow",
+        "hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         isNow && "border-primary/50 shadow-md ring-1 ring-primary/20",
         event.status === "skipped" && "bg-card/60",
       )}
@@ -97,9 +97,9 @@ export function BlockCard({
         </div>
       </div>
 
-      {(showActual || task) && (
+      {(showActual || task || event.kind === "work") && (
         <div className="mt-3 space-y-2 pl-1">
-          {showActual && (
+          {(showActual || event.kind === "work") && (
             <PlannedVsActual planned={planned} actual={event.actualMinutes} color={color} />
           )}
           {task && !isPast && (
@@ -127,7 +127,7 @@ export function PlannedVsActual({ planned, actual, color }: { planned: number; a
         <div className="h-1.5 flex-1 rounded-full bg-muted">
           <div
             className="h-full rounded-full border border-dashed"
-            style={{ width: `${(planned / max) * 100}%`, borderColor: color }}
+            style={{ width: `${(planned / max) * 100}%`, borderColor: color, backgroundColor: `${color}33` }}
           />
         </div>
         <span className="w-12 text-right tabular-nums">{formatDuration(planned)}</span>

@@ -16,11 +16,20 @@ const fromTime = (v: string) => {
   return h * 60 + m
 }
 
-export function ScheduleDialog({ date, onClose }: { date: string | null; onClose: () => void }) {
+export interface ScheduleDraft {
+  date: string
+  startMin?: number
+  endMin?: number
+}
+
+const toTime = (min: number) =>
+  `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`
+
+export function ScheduleDialog({ draft, onClose }: { draft: ScheduleDraft | null; onClose: () => void }) {
   return (
-    <Dialog open={date !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={draft !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
-        {date && <ScheduleForm key={date} initialDate={date} onDone={onClose} />}
+        {draft && <ScheduleForm key={`${draft.date}-${draft.startMin}`} draft={draft} onDone={onClose} />}
       </DialogContent>
     </Dialog>
   )
@@ -28,13 +37,14 @@ export function ScheduleDialog({ date, onClose }: { date: string | null; onClose
 
 const selectClass = "h-9 w-full rounded-md border bg-background px-2 text-sm"
 
-function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: () => void }) {
+function ScheduleForm({ draft, onDone }: { draft: ScheduleDraft; onDone: () => void }) {
+  const initialDate = draft.date
   const { data, today, api } = useApp()
   const projects = activeProjects(data).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   const [kind, setKind] = useState<"work" | "life">("work")
   const [date, setDate] = useState(initialDate < today ? today : initialDate)
-  const [start, setStart] = useState("14:00")
-  const [end, setEnd] = useState("15:00")
+  const [start, setStart] = useState(toTime(draft.startMin ?? 14 * 60))
+  const [end, setEnd] = useState(toTime(draft.endMin ?? (draft.startMin ?? 14 * 60) + 60))
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "")
   const [taskId, setTaskId] = useState("")
   const [title, setTitle] = useState("")
@@ -48,7 +58,9 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
   const clash = data.events.find(
     (e) => e.date === date && e.status !== "skipped" && e.startMin < endMin && e.endMin > startMin,
   )
-  const ready = validTime && (kind === "work" ? Boolean(task) : title.trim().length > 0)
+  const standalone = !projectId
+  const needsTitle = kind === "life" || standalone
+  const ready = validTime && (needsTitle ? title.trim().length > 0 : Boolean(task))
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,10 +73,11 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
           date,
           startMin,
           endMin,
-          title: kind === "work" ? task!.title : title.trim().slice(0, 80),
-          taskId: kind === "work" ? task!.id : null,
+          title: needsTitle ? title.trim().slice(0, 80) : task!.title,
+          taskId: kind === "work" && !standalone ? task!.id : null,
           projectId: projectId || null,
-          reason: "Scheduled from Agenda",
+          kind,
+          reason: "Scheduled by hand",
         },
       ],
       "Added to your calendar",
@@ -77,13 +90,13 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
     <form onSubmit={submit} className="space-y-4">
       <DialogHeader>
         <DialogTitle className="font-heading text-xl font-medium">Schedule</DialogTitle>
-        <DialogDescription>Book time to work on an assignment, or add a class, exam or anything else.</DialogDescription>
+        <DialogDescription>Focus time, with or without an assignment, or an event like a class or exam.</DialogDescription>
       </DialogHeader>
 
       <div className="grid grid-cols-2 gap-1 rounded-md border p-0.5" role="radiogroup" aria-label="What are you scheduling?">
         {(
           [
-            ["work", "Work session"],
+            ["work", "Focus block"],
             ["life", "Event"],
           ] as const
         ).map(([k, label]) => (
@@ -92,10 +105,7 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
             type="button"
             role="radio"
             aria-checked={kind === k}
-            onClick={() => {
-              setKind(k)
-              if (k === "work" && !projectId) setProjectId(projects[0]?.id ?? "")
-            }}
+            onClick={() => setKind(k)}
             className={cn(
               "rounded-sm py-1.5 text-sm transition-colors",
               kind === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
@@ -106,15 +116,8 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
         ))}
       </div>
 
-      {kind === "life" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="stitle">Title</Label>
-          <Input id="stitle" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="EECS 281 lecture" required />
-        </div>
-      )}
-
       <div className="space-y-1.5">
-        <Label htmlFor="sproject">{kind === "work" ? "Assignment" : "Linked assignment (optional)"}</Label>
+        <Label htmlFor="sproject">Assignment (optional)</Label>
         <select
           id="sproject"
           className={selectClass}
@@ -124,7 +127,7 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
             setTaskId("")
           }}
         >
-          {kind === "life" && <option value="">None</option>}
+          <option value="">None</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -133,7 +136,20 @@ function ScheduleForm({ initialDate, onDone }: { initialDate: string; onDone: ()
         </select>
       </div>
 
-      {kind === "work" && (
+      {needsTitle && (
+        <div className="space-y-1.5">
+          <Label htmlFor="stitle">Title</Label>
+          <Input
+            id="stitle"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={kind === "life" ? "EECS 281 lecture" : "Clean up my notes"}
+            required
+          />
+        </div>
+      )}
+
+      {kind === "work" && !standalone && (
         <div className="space-y-1.5">
           <Label htmlFor="stask">Task</Label>
           {tasks.length === 0 ? (

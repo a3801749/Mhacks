@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { nowMinutes, toDateKey } from "@/lib/time"
+import { formatDuration, nowMinutes, toDateKey } from "@/lib/time"
 import type { NewProject, ProjectPatch } from "@/lib/store/types"
 import type { CalendarEvent, Integrations, ScheduleChange, Settings, WeekData } from "@/lib/types"
 
@@ -77,8 +77,23 @@ export function useWeek(today: string | null) {
     logTime: (eventId: string, minutes: number, note: string) =>
       mutate(
         () => request(`/api/events/${eventId}/log`, { method: "POST", body: json({ minutes, note }) }),
-        `Logged ${minutes} minutes. Nice.`,
+        minutes > 0 ? `Logged ${formatDuration(minutes)}. Nice.` : `Took ${formatDuration(-minutes)} off`,
       ),
+    updateLog: (logId: string, patch: { minutes?: number; note?: string }) =>
+      mutate(() => request(`/api/logs/${logId}`, { method: "PATCH", body: json(patch) }), "Entry updated"),
+    deleteLog: (logId: string) =>
+      mutate(() => request(`/api/logs/${logId}`, { method: "DELETE" }), "Entry removed"),
+    reorderPins: (ids: string[]) => {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              projects: prev.projects.map((p) => (ids.includes(p.id) ? { ...p, pinOrder: ids.indexOf(p.id) } : p)),
+            }
+          : prev,
+      )
+      return mutate(() => request(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
+    },
     updateEvent: (eventId: string, patch: Partial<Pick<CalendarEvent, "status" | "date" | "startMin" | "endMin">>, msg?: string) =>
       mutate(() => request(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
     setTaskDone: (taskId: string, done: boolean) =>

@@ -33,9 +33,18 @@ export interface NewProject {
   firstTask: string
 }
 
+export interface LogPatch {
+  minutes?: number
+  note?: string
+}
+
 export interface Store {
   getWeek(today: string): Promise<WeekData>
+  /** Negative minutes take time back off; an event's actual time never drops below zero. */
   logTime(eventId: string, minutes: number, note: string): Promise<WeekData>
+  updateLog(logId: string, patch: LogPatch): Promise<WeekData>
+  deleteLog(logId: string): Promise<WeekData>
+  reorderPins(projectIds: string[]): Promise<WeekData>
   updateEvent(eventId: string, patch: EventPatch): Promise<WeekData>
   setTaskDone(taskId: string, done: boolean): Promise<WeekData>
   updateProject(projectId: string, patch: ProjectPatch): Promise<WeekData>

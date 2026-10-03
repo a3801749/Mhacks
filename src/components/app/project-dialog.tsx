@@ -3,16 +3,18 @@
 import { useState } from "react"
 import { CheckCircle2, Loader2, Pin } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { APP_NAME, ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
+import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 import { estimateProject } from "@/lib/analytics"
 import { addDays, formatDuration } from "@/lib/time"
 import type { AssignmentType, Priority, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { CourseField } from "./course-field"
 import type { WeekApi } from "@/hooks/use-week"
 
 export function ProjectDialog({
@@ -71,6 +73,7 @@ function ProjectForm({
   const [assigned, setAssigned] = useState(p?.assignedDate ?? today)
   const [due, setDue] = useState(p?.dueDate ?? addDays(today, 7))
   const [firstTask, setFirstTask] = useState("")
+  const [progress, setProgress] = useState(p?.progressPercent ?? 0)
   const [saving, setSaving] = useState<"save" | "finish" | null>(null)
   const courses = [...new Set(data.projects.map((x) => x.course))].sort()
 
@@ -86,13 +89,24 @@ function ProjectForm({
       notes,
       pinned: false,
       pinCount: 0,
+      pinOrder: 0,
       targetMinutes: Math.round(Number(hours) * 60) || 60,
       assignedDate: assigned,
       dueDate: due,
       progressPercent: null,
       completedDate: null,
     } satisfies Project)
-  const estimate = estimateProject({ ...preview, course: course || preview.course, type, targetMinutes: Math.round(Number(hours) * 60) || 60 }, data)
+  const progressChanged = !isNew && progress !== (p!.progressPercent ?? 0)
+  const estimate = estimateProject(
+    {
+      ...preview,
+      course: course || preview.course,
+      type,
+      targetMinutes: Math.round(Number(hours) * 60) || 60,
+      progressPercent: isNew ? null : progressChanged ? progress : p!.progressPercent,
+    },
+    data,
+  )
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -101,7 +115,11 @@ function ProjectForm({
     const fields = { name, course, type, priority, notes, targetMinutes, assignedDate: assigned, dueDate: due }
     let ok = isNew
       ? await api.createProject({ ...fields, firstTask })
-      : await api.updateProject(p!.id, { ...fields, pinned }, "Saved")
+      : await api.updateProject(
+          p!.id,
+          { ...fields, pinned, ...(progressChanged ? { progressPercent: progress } : {}) },
+          "Saved",
+        )
     if (ok && isNew && pinned) {
       const created = ok.projects.find((x) => !data.projects.some((d) => d.id === x.id))
       if (created) ok = await api.togglePin(created.id, true)
@@ -114,9 +132,6 @@ function ProjectForm({
     <form onSubmit={submit} className="space-y-4">
       <DialogHeader>
         <DialogTitle className="font-heading text-xl font-medium">{isNew ? "New assignment" : "Edit assignment"}</DialogTitle>
-        <DialogDescription>
-          Course, category and priority help {APP_NAME} learn what runs long and what to plan first.
-        </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-1.5">
@@ -126,12 +141,7 @@ function ProjectForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="pcourse">Course</Label>
-        <Input id="pcourse" list="course-options" value={course} onChange={(e) => setCourse(e.target.value)} placeholder="EECS 281" />
-        <datalist id="course-options">
-          {courses.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
+        <CourseField id="pcourse" value={course} onChange={setCourse} courses={courses} />
       </div>
 
       <div className="space-y-1.5">
@@ -156,7 +166,7 @@ function ProjectForm({
 
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="phours">Your estimate (h)</Label>
+          <Label htmlFor="phours">Estimate (hr)</Label>
           <Input id="phours" type="number" min={0.25} step={0.25} value={hours} onChange={(e) => setHours(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
@@ -168,6 +178,23 @@ function ProjectForm({
           <Input id="pdue" type="date" value={due} min={assigned} onChange={(e) => setDue(e.target.value)} required />
         </div>
       </div>
+
+      {!isNew && !p!.completedDate && (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <Label>Progress</Label>
+            <span className="font-heading text-lg tabular-nums">{progress}%</span>
+          </div>
+          <Slider
+            value={[progress]}
+            min={0}
+            max={100}
+            step={5}
+            onValueChange={(v) => setProgress(Array.isArray(v) ? v[0] : v)}
+            aria-label="Assignment progress"
+          />
+        </div>
+      )}
 
       {isNew && (
         <div className="space-y-1.5">
@@ -196,7 +223,13 @@ function ProjectForm({
       </label>
 
       <p className="rounded-md bg-secondary/70 p-3 text-sm text-secondary-foreground">
-        <span className="font-medium">Likely total: {formatDuration(estimate.total)}.</span> {estimate.explanation}
+        {estimate.uncertain ? (
+          estimate.explanation
+        ) : (
+          <>
+            <span className="font-medium">Likely total: {formatDuration(estimate.total)}.</span> {estimate.explanation}
+          </>
+        )}
       </p>
 
       <div className="flex flex-wrap gap-2 pt-1">

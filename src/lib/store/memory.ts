@@ -1,5 +1,5 @@
 import { buildSeed } from "../seed"
-import { applyChanges } from "../schedule"
+import { applyChanges, statusForActual } from "../schedule"
 import { toDateKey } from "../time"
 import type { WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
@@ -32,11 +32,52 @@ export const memoryStore: Store = {
     const d = current()
     const event = d.events.find((e) => e.id === eventId)
     if (!event) throw new Error("Event not found")
-    event.actualMinutes += minutes
-    event.status = event.actualMinutes >= event.endMin - event.startMin ? "completed" : "partial"
-    if (event.taskId) {
-      d.logs.push({ id: uid("l"), taskId: event.taskId, eventId, minutes, note, createdAt: new Date().toISOString() })
+    const before = event.actualMinutes
+    event.actualMinutes = Math.max(0, before + minutes)
+    event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+    const applied = event.actualMinutes - before
+    if (event.taskId && applied !== 0) {
+      d.logs.push({ id: uid("l"), taskId: event.taskId, eventId, minutes: applied, note, createdAt: new Date().toISOString() })
     }
+    return snapshot(d)
+  },
+
+  async updateLog(logId, patch) {
+    const d = current()
+    const log = d.logs.find((l) => l.id === logId)
+    if (!log) throw new Error("Log entry not found")
+    if (patch.note != null) log.note = patch.note
+    if (patch.minutes != null) {
+      const event = d.events.find((e) => e.id === log.eventId)
+      if (event) {
+        const before = event.actualMinutes
+        event.actualMinutes = Math.max(0, before + patch.minutes - log.minutes)
+        event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+      }
+      log.minutes = patch.minutes
+    }
+    return snapshot(d)
+  },
+
+  async deleteLog(logId) {
+    const d = current()
+    const log = d.logs.find((l) => l.id === logId)
+    if (!log) throw new Error("Log entry not found")
+    const event = d.events.find((e) => e.id === log.eventId)
+    if (event) {
+      event.actualMinutes = Math.max(0, event.actualMinutes - log.minutes)
+      event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+    }
+    d.logs = d.logs.filter((l) => l.id !== logId)
+    return snapshot(d)
+  },
+
+  async reorderPins(projectIds) {
+    const d = current()
+    projectIds.forEach((id, i) => {
+      const p = d.projects.find((x) => x.id === id)
+      if (p) p.pinOrder = i
+    })
     return snapshot(d)
   },
 
@@ -60,7 +101,10 @@ export const memoryStore: Store = {
     const d = current()
     const project = d.projects.find((p) => p.id === projectId)
     if (!project) throw new Error("Assignment not found")
-    if (patch.pinned && !project.pinned) project.pinCount += 1
+    if (patch.pinned && !project.pinned) {
+      project.pinCount += 1
+      project.pinOrder = Math.max(-1, ...d.projects.filter((p) => p.pinned).map((p) => p.pinOrder)) + 1
+    }
     Object.assign(project, patch)
     return snapshot(d)
   },
@@ -78,6 +122,7 @@ export const memoryStore: Store = {
       notes: input.notes ?? "",
       pinned: false,
       pinCount: 0,
+      pinOrder: 0,
       targetMinutes: input.targetMinutes,
       assignedDate: input.assignedDate,
       dueDate: input.dueDate,

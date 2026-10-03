@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 import { useApp } from "./app-shell"
 import { dueText, PaceTag, PinButton, ProgressBar, Tag } from "./assignment-bits"
 import { Segmented } from "./rhythm-view"
-import { ScheduleDialog } from "./schedule-dialog"
+import { ScheduleDialog, type ScheduleDraft } from "./schedule-dialog"
 
 type SortKey = "due" | "priority" | "progress" | "remaining" | "pinned"
 
@@ -64,7 +64,7 @@ export function AgendaView() {
   const [sort, setSort] = useState<SortKey>("due")
   const [finished, setFinished] = useState(false)
   const [selected, setSelected] = useState(today)
-  const [schedule, setSchedule] = useState<string | null>(null)
+  const [schedule, setSchedule] = useState<ScheduleDraft | null>(null)
 
   const allCourses = useMemo(() => [...new Set(data.projects.map((p) => p.course))].sort(), [data.projects])
   const projectById = useMemo(() => new Map(data.projects.map((p) => [p.id, p])), [data.projects])
@@ -107,7 +107,7 @@ export function AgendaView() {
             Every assignment and event in one place. Pick a day on the calendar to see what’s on it.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setSchedule(selected)}>
+        <Button variant="outline" onClick={() => setSchedule({ date: selected })}>
           <CalendarPlus /> Schedule event
         </Button>
       </header>
@@ -121,7 +121,7 @@ export function AgendaView() {
             today={today}
             onOpenEvent={openBlock}
             onOpenProject={editProject}
-            onSchedule={() => setSchedule(selected)}
+            onSchedule={() => setSchedule({ date: selected })}
           />
         </aside>
 
@@ -199,7 +199,7 @@ export function AgendaView() {
         </section>
       </div>
 
-      <ScheduleDialog date={schedule} onClose={() => setSchedule(null)} />
+      <ScheduleDialog draft={schedule} onClose={() => setSchedule(null)} />
     </div>
   )
 }

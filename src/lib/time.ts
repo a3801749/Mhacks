@@ -53,6 +53,9 @@ export function monthDay(key: string): string {
   return fromDateKey(key).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+/** Largest single time-log entry, in either direction. */
+export const MAX_LOG_MINUTES = 12 * 60
+
 /** Short, relative due label: "Today", "Tomorrow", "Thu", or "Oct 12". */
 export function formatDue(today: string, date: string): string {
   const d = daysBetween(today, date)

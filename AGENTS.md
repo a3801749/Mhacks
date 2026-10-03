@@ -13,11 +13,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Reflective calendar. Product name **Andy**, companion **Tilly**. Before changing behavior, read `docs/ai-handoff.md`. It is the source of truth for data model, pages, and the traps below.
 
 - Stored guidance values are `anchor` | `coach` | `autopilot`. The UI calls `coach` **Lighthouse** and `autopilot` **Tide**. Do not rename the stored values.
-- Assignment categories are `project` | `exam` | `homework` | `reading`. Priority is `accuracy` | `completion` | `flexible` | `optional`.
+- Assignment categories are `project` | `exam` | `homework` | `reading` | `misc`. Priority is `accuracy` | `completion` | `flexible` | `optional`.
 - Times are a `YYYY-MM-DD` date plus minutes from local midnight. The client sends `today`.
 - New assignment fields must be added to both stores (`memory.ts` and `neon.ts`), `db/schema.sql` (including an `ADD COLUMN IF NOT EXISTS` upgrade), the seed, and the project API routes.
 - `pin_count` only increases when a pin turns on. Do not decrement it on unpin.
 - Rhythm wind-down insights must exclude today.
+- Time logs can be negative (removals). Keep `actual_minutes` clamped at 0 and status from `statusForActual`. One entry is at most `MAX_LOG_MINUTES`.
+- Blocks do not need an assignment or a task.
 - `screenTimeEnabled` stays false. Screen time is a documented future extension, not a working feature.
 - UI: flat background, `--radius: 0.5rem`, short pace labels (On pace, Behind pace, Ahead, Done). No page-wide gradient, no wave progress bars.
 - shadcn primitives use a `render` prop, not `asChild`. `cn` comes from `@/lib/utils`, never from a package named `cn`.

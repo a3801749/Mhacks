@@ -30,11 +30,12 @@ export const ASSIGNMENT_TYPES = {
   exam: "Exam",
   homework: "Homework",
   reading: "Reading",
+  misc: "Misc",
 } as const
 
 export const PRIORITIES = {
-  accuracy: { label: "Graded on accuracy", short: "Accuracy", weight: 1.35 },
-  completion: { label: "Graded on completion", short: "Completion", weight: 1 },
+  accuracy: { label: "Accuracy", short: "Accuracy", weight: 1.35 },
+  completion: { label: "Completion", short: "Completion", weight: 1 },
   flexible: { label: "Flexible", short: "Flexible", weight: 0.8 },
   optional: { label: "Optional", short: "Optional", weight: 0.5 },
 } as const
