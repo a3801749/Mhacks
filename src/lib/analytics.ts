@@ -1,4 +1,4 @@
-import { ASSIGNMENT_TYPES } from "./brand"
+import { ASSIGNMENT_TYPES, PRIORITIES } from "./brand"
 import { addDays, daysBetween, formatClock, formatDuration } from "./time"
 import type { CalendarEvent, Project, Task, TimeLog, WeekData } from "./types"
 
@@ -158,6 +158,82 @@ export function projectHealth(data: WeekData, today: string): ProjectHealth[] {
 }
 
 /* ------------------------------------------------------------------ */
+/* Pins: what the user keeps reaching for.                             */
+/* ------------------------------------------------------------------ */
+
+export interface PinPreference {
+  course: string | null
+  type: Project["type"] | null
+  /** Share of all pins that went to this course / type, 0–1. */
+  courseShare: number
+  typeShare: number
+  totalPins: number
+}
+
+/** Needs a few pins before it's worth acting on; otherwise every first pin would look like a habit. */
+export function pinPreferences(data: WeekData): PinPreference | null {
+  const total = data.projects.reduce((s, p) => s + p.pinCount, 0)
+  if (total < 3) return null
+  const top = <K extends string>(key: (p: Project) => K) => {
+    const counts = new Map<K, number>()
+    for (const p of data.projects) counts.set(key(p), (counts.get(key(p)) ?? 0) + p.pinCount)
+    const [k, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+    return { k, share: n / total }
+  }
+  const course = top((p) => p.course)
+  const type = top((p) => p.type)
+  return {
+    course: course.share >= 0.35 ? course.k : null,
+    type: type.share >= 0.35 ? type.k : null,
+    courseShare: course.share,
+    typeShare: type.share,
+    totalPins: total,
+  }
+}
+
+/** Planner weight: grading stakes, explicit pins, and the categories the user habitually pins. */
+export function attentionWeight(p: Project, prefs = null as PinPreference | null) {
+  let w: number = PRIORITIES[p.priority].weight
+  if (p.pinned) w *= 1.3
+  if (prefs?.course === p.course) w *= 1.1
+  if (prefs?.type === p.type) w *= 1.1
+  return w
+}
+
+export function pinPreferenceLabel(prefs: PinPreference | null) {
+  if (!prefs || (!prefs.course && !prefs.type)) return null
+  const parts = [prefs.course, prefs.type ? `${ASSIGNMENT_TYPES[prefs.type].toLowerCase()}s` : null].filter(Boolean)
+  return parts.join(" ")
+}
+
+/* ------------------------------------------------------------------ */
+/* Day load for the calendar heatmap.                                  */
+/* ------------------------------------------------------------------ */
+
+export type Busyness = "free" | "light" | "medium" | "heavy"
+
+export interface DayLoad {
+  date: string
+  scheduledMinutes: number
+  due: Project[]
+  score: number
+  level: Busyness
+}
+
+const DUE_WEIGHT: Record<Project["priority"], number> = { accuracy: 120, completion: 60, flexible: 40, optional: 20 }
+
+/** Booked time plus a penalty for each deadline, so a free day with an exam due still reads as busy. */
+export function dayLoad(data: WeekData, date: string): DayLoad {
+  const scheduledMinutes = data.events
+    .filter((e) => e.date === date && e.status !== "skipped")
+    .reduce((s, e) => s + (e.endMin - e.startMin), 0)
+  const due = activeProjects(data).filter((p) => p.dueDate === date)
+  const score = scheduledMinutes + due.reduce((s, p) => s + DUE_WEIGHT[p.priority] * (p.type === "exam" ? 1.5 : 1), 0)
+  const level: Busyness = score === 0 ? "free" : score < 300 ? "light" : score < 420 ? "medium" : "heavy"
+  return { date, scheduledMinutes, due, score, level }
+}
+
+/* ------------------------------------------------------------------ */
 /* Backtracking over the visible window.                               */
 /* ------------------------------------------------------------------ */
 
@@ -277,6 +353,13 @@ export function sessions(data: WeekData, from: string, to: string): Session[] {
     }))
 }
 
+export const TYPE_COLORS: Record<Project["type"], string> = {
+  project: "#7C83D6",
+  exam: "#B07CC6",
+  homework: "#5FA3B8",
+  reading: "#D99A4E",
+}
+
 export function groupKey(projectId: string | null, data: WeekData, by: RhythmGroupBy) {
   const p = data.projects.find((x) => x.id === projectId)
   if (!p) return { key: "other", label: "Other", color: "#A8A29E" }
@@ -284,13 +367,6 @@ export function groupKey(projectId: string | null, data: WeekData, by: RhythmGro
   if (by === "course") {
     const first = data.projects.find((x) => x.course === p.course)!
     return { key: p.course, label: p.course, color: first.color }
-  }
-  const TYPE_COLORS: Record<Project["type"], string> = {
-    project: "#7C83D6",
-    homework: "#5FA3B8",
-    reading: "#D99A4E",
-    studying: "#B07CC6",
-    writing: "#6F9E80",
   }
   return { key: p.type, label: ASSIGNMENT_TYPES[p.type], color: TYPE_COLORS[p.type] }
 }

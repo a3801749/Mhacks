@@ -20,7 +20,12 @@ CREATE TABLE IF NOT EXISTS projects (
   color            TEXT NOT NULL,
   course           TEXT NOT NULL DEFAULT 'General',
   type             TEXT NOT NULL DEFAULT 'project'
-                   CHECK (type IN ('project', 'homework', 'reading', 'studying', 'writing')),
+                   CONSTRAINT projects_category_check CHECK (type IN ('project', 'exam', 'homework', 'reading')),
+  priority         TEXT NOT NULL DEFAULT 'completion'
+                   CONSTRAINT projects_priority_check CHECK (priority IN ('accuracy', 'completion', 'flexible', 'optional')),
+  notes            TEXT NOT NULL DEFAULT '',
+  pinned           BOOLEAN NOT NULL DEFAULT false,
+  pin_count        INTEGER NOT NULL DEFAULT 0,
   target_minutes   INTEGER NOT NULL,
   assigned_date    DATE NOT NULL DEFAULT CURRENT_DATE,
   due_date         DATE NOT NULL,
@@ -84,3 +89,11 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'projec
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS assigned_date DATE NOT NULL DEFAULT CURRENT_DATE;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS progress_percent INTEGER;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS completed_date DATE;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'completion';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS pin_count INTEGER NOT NULL DEFAULT 0;
+-- The old category list (with studying/writing) used the auto-named constraint.
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_type_check;
+UPDATE projects SET type = 'exam' WHERE type = 'studying';
+UPDATE projects SET type = 'project' WHERE type = 'writing';

@@ -16,7 +16,7 @@ onboarding, clear the flag first: in the browser console, run `localStorage.remo
 ### 2. Onboarding (40s) — `/welcome`
 
 - Click **Start tour** on the banner.
-- **Guidance:** pick **Coach**. Point out that you choose up front how much the AI may change your calendar.
+- **Guidance:** pick **Lighthouse**. Point out that you choose up front how much the AI may change your calendar.
 - **Extras:** show the three previews. Linger on **Screen time**: "A 2-hour block was really 1h 24m on task and
   22 minutes of YouTube and Instagram. Andy logs the real number." (Coming soon; this is sample data.)
 - **First assignment:** add `EECS 281 · Homework 8`, course `EECS 281`, type Homework. Point out the tagging.

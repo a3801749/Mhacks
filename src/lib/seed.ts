@@ -10,17 +10,18 @@ type ProjectSeed = Omit<Project, "assignedDate" | "dueDate" | "completedDate"> &
 }
 
 const PROJECTS: ProjectSeed[] = [
-  { id: "p-thesis", name: "Thesis · Chapter 3", color: "#6F9E80", course: "Thesis", type: "writing", targetMinutes: h(12), assigned: -12, due: 9, progressPercent: 60 },
-  { id: "p-eecs", name: "EECS 281 · Project 4", color: "#7C83D6", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -8, due: 4, progressPercent: 55 },
-  { id: "p-portfolio", name: "Portfolio refresh", color: "#D99A4E", course: "Personal", type: "project", targetMinutes: h(6), assigned: -6, due: 14, progressPercent: null },
-  { id: "p-hack", name: "Hackathon prep", color: "#D9776A", course: "MHacks", type: "project", targetMinutes: h(5), assigned: -3, due: 2, progressPercent: 20 },
-  { id: "p-si", name: "SI 206 · Reading 5", color: "#5FA3B8", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -2, due: 3, progressPercent: null },
+  { id: "p-thesis", priority: "accuracy", notes: "Advisor wants the methods draft before our next meeting. Use the 2023 survey data, not the pilot.", pinned: true, pinCount: 2, name: "Thesis · Chapter 3", color: "#6F9E80", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -12, due: 9, progressPercent: 60 },
+  { id: "p-eecs", priority: "accuracy", notes: "Autograder caps at 3 submissions a day — test locally first.", pinned: false, pinCount: 1, name: "EECS 281 · Project 4", color: "#7C83D6", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -8, due: 4, progressPercent: 55 },
+  { id: "p-portfolio", priority: "flexible", notes: "", pinned: false, pinCount: 0, name: "Portfolio refresh", color: "#D99A4E", course: "Personal", type: "project", targetMinutes: h(6), assigned: -6, due: 14, progressPercent: null },
+  { id: "p-hack", priority: "completion", notes: "Demo needs to work offline in case the venue Wi-Fi dies.", pinned: false, pinCount: 0, name: "Hackathon prep", color: "#D9776A", course: "MHacks", type: "project", targetMinutes: h(5), assigned: -3, due: 2, progressPercent: 20 },
+  { id: "p-si", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "SI 206 · Reading 5", color: "#5FA3B8", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -2, due: 3, progressPercent: null },
+  { id: "p-mid", priority: "accuracy", notes: "Covers heaps, hashing and graphs. One double-sided cheat sheet allowed.", pinned: true, pinCount: 3, name: "EECS 281 · Midterm", color: "#B07CC6", course: "EECS 281", type: "exam", targetMinutes: h(6), assigned: -10, due: 6, progressPercent: 15 },
 
-  { id: "p-ch2", name: "Thesis · Chapter 2", color: "#8DB59A", course: "Thesis", type: "writing", targetMinutes: h(12), assigned: -40, due: -13, completed: -14, progressPercent: 100 },
-  { id: "p-eecs3", name: "EECS 281 · Project 3", color: "#9EA3E0", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -35, due: -15, completed: -16, progressPercent: 100 },
-  { id: "p-hw6", name: "EECS 281 · Homework 6", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -30, due: -22, completed: -23, progressPercent: 100 },
-  { id: "p-hw7", name: "EECS 281 · Homework 7", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -22, due: -14, completed: -15, progressPercent: 100 },
-  { id: "p-read4", name: "SI 206 · Reading 4", color: "#86BCCB", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -25, due: -19, completed: -20, progressPercent: 100 },
+  { id: "p-ch2", priority: "accuracy", notes: "", pinned: false, pinCount: 1, name: "Thesis · Chapter 2", color: "#8DB59A", course: "Thesis", type: "project", targetMinutes: h(12), assigned: -40, due: -13, completed: -14, progressPercent: 100 },
+  { id: "p-eecs3", priority: "accuracy", notes: "", pinned: false, pinCount: 2, name: "EECS 281 · Project 3", color: "#9EA3E0", course: "EECS 281", type: "project", targetMinutes: h(10), assigned: -35, due: -15, completed: -16, progressPercent: 100 },
+  { id: "p-hw6", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "EECS 281 · Homework 6", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -30, due: -22, completed: -23, progressPercent: 100 },
+  { id: "p-hw7", priority: "completion", notes: "", pinned: false, pinCount: 1, name: "EECS 281 · Homework 7", color: "#A9ACD9", course: "EECS 281", type: "homework", targetMinutes: h(3), assigned: -22, due: -14, completed: -15, progressPercent: 100 },
+  { id: "p-read4", priority: "completion", notes: "", pinned: false, pinCount: 0, name: "SI 206 · Reading 4", color: "#86BCCB", course: "SI 206", type: "reading", targetMinutes: h(2), assigned: -25, due: -19, completed: -20, progressPercent: 100 },
 ]
 
 export const SEED_TASKS: Task[] = [
@@ -35,6 +36,8 @@ export const SEED_TASKS: Task[] = [
   { id: "t-pitch", projectId: "p-hack", title: "Pitch deck + demo script", estimateMinutes: h(2), done: false },
   { id: "t-proto", projectId: "p-hack", title: "Prototype voice flow", estimateMinutes: h(3), done: false },
   { id: "t-read5", projectId: "p-si", title: "Read ch. 9–10 + notes", estimateMinutes: h(2), done: false },
+  { id: "t-sheet", projectId: "p-mid", title: "Build the cheat sheet", estimateMinutes: h(2), done: false },
+  { id: "t-practice", projectId: "p-mid", title: "Timed practice exam", estimateMinutes: h(3), done: false },
 
   { id: "t-ch2", projectId: "p-ch2", title: "Write Chapter 2", estimateMinutes: h(12), done: true },
   { id: "t-eecs3", projectId: "p-eecs3", title: "Hash table project", estimateMinutes: h(10), done: true },
@@ -52,6 +55,8 @@ interface Template {
   taskId?: string
   title?: string
   kind?: "work" | "life"
+  /** Links a life event (class, exam, office hours) to an assignment. */
+  projectId?: string
   outcome: Outcome
   actual?: number
   note?: string
@@ -93,6 +98,17 @@ const TEMPLATES: Template[] = [
   { offset: 2, start: h(9), end: h(10, 30), taskId: "t-lit", outcome: "planned" },
   { offset: 2, start: h(11), end: h(12), taskId: "t-tests", outcome: "planned" },
   { offset: 2, start: h(15), end: h(16, 30), taskId: "t-layout", outcome: "planned" },
+
+  // Further out, visible on the Agenda calendar.
+  { offset: 3, start: h(10), end: h(11, 30), taskId: "t-read5", outcome: "planned" },
+  { offset: 3, start: h(13), end: h(15), taskId: "t-sheet", outcome: "planned" },
+  { offset: 3, start: h(15, 30), end: h(17), taskId: "t-tests", outcome: "planned" },
+  { offset: 3, start: h(19), end: h(21), title: "Study group", kind: "life", projectId: "p-mid", outcome: "planned" },
+  { offset: 4, start: h(9), end: h(10, 30), taskId: "t-draft", outcome: "planned" },
+  { offset: 5, start: h(10), end: h(13), taskId: "t-practice", outcome: "planned" },
+  { offset: 5, start: h(14), end: h(15), title: "Office hours", kind: "life", projectId: "p-eecs", outcome: "planned" },
+  { offset: 6, start: h(19), end: h(21), title: "EECS 281 Midterm", kind: "life", projectId: "p-mid", outcome: "planned" },
+  { offset: 8, start: h(17), end: h(18), title: "Climbing gym", kind: "life", outcome: "planned" },
 ]
 
 interface HistoryPlan {
@@ -147,12 +163,12 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
 
   const push = (
     task: Task | undefined,
-    tpl: { date: string; start: number; end: number; status: EventStatus; actual: number; title?: string; kind?: "work" | "life"; note?: string },
+    tpl: { date: string; start: number; end: number; status: EventStatus; actual: number; title?: string; kind?: "work" | "life"; note?: string; projectId?: string },
   ) => {
     const id = `e-${++n}`
     events.push({
       id,
-      projectId: task?.projectId ?? null,
+      projectId: task?.projectId ?? tpl.projectId ?? null,
       taskId: task?.id ?? null,
       title: task?.title ?? tpl.title ?? "Block",
       date: tpl.date,
@@ -216,6 +232,7 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
       title: tpl.title,
       kind: tpl.kind,
       note: tpl.note,
+      projectId: tpl.projectId,
     })
   }
 

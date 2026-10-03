@@ -24,7 +24,7 @@ const RANGES = [
 const GROUPS: { key: RhythmGroupBy; label: string }[] = [
   { key: "project", label: "Assignment" },
   { key: "course", label: "Course" },
-  { key: "type", label: "Type" },
+  { key: "type", label: "Category" },
 ]
 
 export function RhythmView() {
@@ -287,7 +287,7 @@ export function Segmented<T extends string | number>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex rounded-full border bg-card p-0.5" role="radiogroup">
+    <div className="inline-flex rounded-md border bg-card p-0.5" role="radiogroup">
       {options.map((o) => (
         <button
           key={o.key}
@@ -295,7 +295,7 @@ export function Segmented<T extends string | number>({
           aria-checked={value === o.key}
           onClick={() => onChange(o.key)}
           className={cn(
-            "rounded-full px-3 py-1 text-xs transition-colors",
+            "rounded-sm px-3 py-1 text-xs transition-colors",
             value === o.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

@@ -53,6 +53,16 @@ export function monthDay(key: string): string {
   return fromDateKey(key).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+/** Short, relative due label: "Today", "Tomorrow", "Thu", or "Oct 12". */
+export function formatDue(today: string, date: string): string {
+  const d = daysBetween(today, date)
+  if (d < 0) return "Overdue"
+  if (d === 0) return "Today"
+  if (d === 1) return "Tomorrow"
+  if (d < 7) return weekdayShort(date)
+  return monthDay(date)
+}
+
 export function nowMinutes(d = new Date()): number {
   return d.getHours() * 60 + d.getMinutes()
 }

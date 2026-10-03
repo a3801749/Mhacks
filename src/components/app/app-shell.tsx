@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Anchor, CalendarDays, CalendarRange, Compass, GanttChart, RefreshCw, Sun, Waves, Activity } from "lucide-react"
+import { Activity, Anchor, CalendarDays, CalendarRange, GanttChart, Lighthouse, ListTodo, Plus, RefreshCw, Sun, Waves } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AGENT_NAME, APP_NAME, APP_TAGLINE, GUIDANCE_MODES } from "@/lib/brand"
@@ -36,12 +36,13 @@ export function useApp() {
 
 const NAV = [
   { href: "/", label: "Today", icon: Sun },
+  { href: "/agenda", label: "Agenda", icon: ListTodo },
   { href: "/plan", label: "Plan", icon: CalendarRange },
   { href: "/rhythm", label: "Rhythm", icon: Activity },
   { href: "/timeline", label: "Timeline", icon: GanttChart },
 ]
 
-const MODE_ICON = { anchor: Anchor, coach: Compass, autopilot: Waves }
+const MODE_ICON = { anchor: Anchor, coach: Lighthouse, autopilot: Waves }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const now = useClock()
@@ -83,6 +84,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               return <Icon />
             })()}
             <span className="hidden sm:inline">{GUIDANCE_MODES[data.settings.guidanceMode].label} mode</span>
+          </Button>
+        )}
+        {data && (
+          <Button size="sm" onClick={() => setProject("new")} className="gap-1.5">
+            <Plus />
+            <span className="sm:hidden">New</span>
+            <span className="hidden sm:inline">New assignment</span>
           </Button>
         )}
       </div>
@@ -150,7 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <button
           onClick={() => setAgentOpen(true)}
-          className="fixed right-4 bottom-4 z-40 flex items-center gap-3 rounded-full border bg-card py-2 pr-5 pl-2 shadow-lg transition-transform hover:-translate-y-0.5 hover:shadow-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:right-6 sm:bottom-6"
+          className="fixed right-4 bottom-4 z-40 flex items-center gap-3 rounded-full border bg-card py-2 pr-5 pl-2 shadow-md transition-colors hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:right-6 sm:bottom-6"
         >
           <TillyOrb />
           <span className="text-left">
@@ -196,7 +204,7 @@ function NavLink({ href, label, icon: Icon, active }: { href: string; label: str
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors",
+        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
         active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
       )}
     >
@@ -207,7 +215,7 @@ function NavLink({ href, label, icon: Icon, active }: { href: string; label: str
 }
 
 function Paper({ children }: { children: React.ReactNode }) {
-  return <div className="app-paper flex min-h-dvh flex-col">{children}</div>
+  return <div className="flex min-h-dvh flex-col bg-background">{children}</div>
 }
 
 function Logo() {

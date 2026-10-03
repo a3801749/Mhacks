@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Anchor, Compass, Loader2, RotateCcw, Waves } from "lucide-react"
+import { Anchor, Lighthouse, Loader2, RotateCcw, Waves } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -12,7 +12,7 @@ import type { GuidanceMode, Integrations, Settings, WeekData } from "@/lib/types
 import { cn } from "@/lib/utils"
 import type { WeekApi } from "@/hooks/use-week"
 
-const ICONS: Record<GuidanceMode, typeof Anchor> = { anchor: Anchor, coach: Compass, autopilot: Waves }
+const ICONS: Record<GuidanceMode, typeof Anchor> = { anchor: Anchor, coach: Lighthouse, autopilot: Waves }
 
 export function SettingsDialog({
   open,
@@ -152,7 +152,7 @@ function ServiceRow({ label, on, detail, fallback }: { label: string; on?: boole
       </span>
       <span
         className={cn(
-          "rounded-full px-2 py-0.5 text-xs whitespace-nowrap",
+          "rounded-sm px-2 py-0.5 text-xs whitespace-nowrap",
           on ? "bg-emerald-100 text-emerald-800" : "bg-secondary text-muted-foreground",
         )}
       >

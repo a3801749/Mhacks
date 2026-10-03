@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Compass, X } from "lucide-react"
+import { Map as MapIcon, X } from "lucide-react"
 import { APP_NAME } from "@/lib/brand"
 import { ONBOARDED_KEY } from "./onboarding-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -47,14 +47,12 @@ export function TodayView() {
       <Tabs defaultValue="calendar" className="lg:hidden">
         <TabsList className="mb-4 w-full">
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
-          <TabsTrigger value="projects">Assignments</TabsTrigger>
+          <TabsTrigger value="projects">Overview</TabsTrigger>
           <TabsTrigger value="reflect">Reflect</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar">{calendar}</TabsContent>
         <TabsContent value="projects">
-          <div className="[&_article]:min-w-0 [&>section>div:last-child]:flex-col [&>section>div:last-child]:overflow-visible">
-            {rail}
-          </div>
+          {rail}
         </TabsContent>
         <TabsContent value="reflect">
           <ReflectPanel data={data} today={today} api={api} />
@@ -72,15 +70,15 @@ function TourBanner() {
   }, [])
   if (!show) return null
   return (
-    <div className="mb-5 flex items-center gap-3 rounded-2xl border border-primary/30 bg-accent/60 px-4 py-3">
-      <Compass className="size-5 shrink-0 text-primary" />
+    <div className="mb-5 flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+      <MapIcon className="size-5 shrink-0 text-primary" />
       <p className="flex-1 text-sm">
         <span className="font-medium">New to {APP_NAME}?</span>{" "}
         <span className="text-muted-foreground">Take the one-minute setup and tour of how everything fits together.</span>
       </p>
       <Link
         href="/welcome"
-        className="rounded-full bg-primary px-3 py-1.5 text-sm font-medium whitespace-nowrap text-primary-foreground"
+        className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium whitespace-nowrap text-primary-foreground"
       >
         Start tour
       </Link>

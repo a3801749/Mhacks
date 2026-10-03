@@ -1,5 +1,15 @@
 import "server-only"
-import { activeProjects, backtrack, categoryStats, categoryLabel, projectHealth, rhythmInsights, taskLogged } from "../analytics"
+import {
+  activeProjects,
+  backtrack,
+  categoryLabel,
+  categoryStats,
+  pinPreferenceLabel,
+  pinPreferences,
+  projectHealth,
+  rhythmInsights,
+  taskLogged,
+} from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { mockAdjust, mockReflect } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
@@ -28,6 +38,9 @@ function context(data: WeekData, today: string) {
       daysLeft: h.daysLeft,
       course: h.project.course,
       type: h.project.type,
+      priority: h.project.priority,
+      pinned: h.project.pinned,
+      notes: h.project.notes.slice(0, 280),
       progressPercent: h.project.progressPercent,
       remainingMinutes: h.remaining,
       estimateBasis: h.estimate.explanation,
@@ -45,6 +58,7 @@ function context(data: WeekData, today: string) {
     categoryHistory: categoryStats(data)
       .filter((c) => c.course)
       .map((c) => ({ category: categoryLabel(c), plannedVsActual: Number(c.multiplier.toFixed(2)), samples: c.samples })),
+    usuallyPins: pinPreferenceLabel(pinPreferences(data)),
   }
 }
 
@@ -104,6 +118,7 @@ export async function reflect(data: WeekData, today: string): Promise<Reflection
           tasks: ctx.tasks,
           upcoming: data.events.filter((e) => e.status === "planned" && e.date >= today),
           categoryHistory: ctx.categoryHistory,
+          usuallyPins: ctx.usuallyPins,
           monthRhythm: rhythmInsights(data, today, 28),
           recentCheckIns: data.settings.checkInEnabled ? recentMood(data, today) : [],
         },
@@ -135,6 +150,7 @@ export async function planBlock(data: WeekData, block: PlanBlock, today: string)
           block,
           busy: busy.map((b) => ({ title: b.title, startMin: b.startMin, endMin: b.endMin })),
           candidates: planCandidates(data, today).slice(0, 8),
+          usuallyPins: pinPreferenceLabel(pinPreferences(data)),
           recentMood: data.settings.checkInEnabled ? recentMood(data, today) : [],
           rhythm: rhythmInsights(data, today, 28),
         },

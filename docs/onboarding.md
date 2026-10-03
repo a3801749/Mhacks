@@ -18,7 +18,7 @@ Target time: under a minute. Every step can be skipped.
 | Step | Screen | What the user does | What gets saved |
 | --- | --- | --- | --- |
 | 0 | **Welcome** | Reads three value props: look back first, blocks that know your tasks, Tilly renegotiates | — |
-| 1 | **Guidance** | Picks Anchor / Coach / Tide, each with an example of what Tilly would say | `settings.guidanceMode` |
+| 1 | **Guidance** | Picks Anchor / Lighthouse / Tide, each with an example of what Tilly would say | `settings.guidanceMode` |
 | 2 | **Extras** | Toggles the daily check-in and the AI planner. Sees a live preview of each. Screen time is shown as "coming soon" with sample data | `settings.checkInEnabled`, `settings.aiPlannerEnabled` |
 | 3 | **First assignment** | Adds one assignment with course + type + guess + due date, or skips to the demo data | New project + first task |
 | 4 | **Tour** | Four cards (Today, Plan, Rhythm, Timeline) with what each is and how to use it, plus a Tilly card. Each card opens that page | `localStorage["andy:onboarded"]` |

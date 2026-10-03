@@ -1,5 +1,5 @@
 import { ASSIGNMENT_TYPES } from "../brand"
-import { projectHealth, taskLogged } from "../analytics"
+import { attentionWeight, pinPreferences, projectHealth, taskLogged } from "../analytics"
 import { formatDuration } from "../time"
 import type { PlanBreakdown, PlanSegment, WeekData } from "../types"
 
@@ -25,6 +25,7 @@ export function freeIntervals(data: WeekData, block: PlanBlock) {
 
 export function planCandidates(data: WeekData, today: string) {
   const health = projectHealth(data, today)
+  const prefs = pinPreferences(data)
   return data.tasks
     .filter((t) => !t.done)
     .flatMap((t) => {
@@ -39,10 +40,12 @@ export function planCandidates(data: WeekData, today: string) {
           project: h.project.name,
           course: h.project.course,
           type: h.project.type,
+          priority: h.project.priority,
+          pinned: h.project.pinned,
           dueDate: h.project.dueDate,
           daysLeft: h.daysLeft,
           remainingMinutes: Math.min(taskRemaining, h.remaining || taskRemaining),
-          urgency: (h.remaining - h.scheduledAhead + 60) / (h.daysLeft + 1),
+          urgency: ((h.remaining - h.scheduledAhead + 60) / (h.daysLeft + 1)) * attentionWeight(h.project, prefs),
         },
       ]
     })
@@ -88,7 +91,9 @@ export function mockBreakdown(data: WeekData, block: PlanBlock, today: string): 
       if (len < 25) continue
       remaining.set(c.taskId, left - len)
       const why =
-        c.daysLeft <= 2
+        c.pinned && c.daysLeft > 2
+          ? `You pinned this — ${formatDuration(c.remainingMinutes)} left.`
+          : c.daysLeft <= 2
           ? `Due in ${c.daysLeft} day${c.daysLeft === 1 ? "" : "s"} — gets it moving.`
           : LIGHT.has(c.type)
             ? `A lighter ${ASSIGNMENT_TYPES[c.type].toLowerCase()} to change gears.`

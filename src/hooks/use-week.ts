@@ -92,6 +92,12 @@ export function useWeek(today: string | null) {
       mutate(() => request(`/api/settings`, { method: "PUT", body: json(patch) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
       mutate(() => request(`/api/projects/${projectId}`, { method: "PATCH", body: json(patch) }), msg),
+    togglePin: (projectId: string, pinned: boolean) => {
+      setData((prev) =>
+        prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? { ...p, pinned } : p)) } : prev,
+      )
+      return mutate(() => request(`/api/projects/${projectId}`, { method: "PATCH", body: json({ pinned }) }))
+    },
     createProject: (project: NewProject) =>
       mutate(() => request(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
     saveCheckIn: (date: string, rating: number, note: string) =>

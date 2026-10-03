@@ -60,6 +60,7 @@ export const memoryStore: Store = {
     const d = current()
     const project = d.projects.find((p) => p.id === projectId)
     if (!project) throw new Error("Assignment not found")
+    if (patch.pinned && !project.pinned) project.pinCount += 1
     Object.assign(project, patch)
     return snapshot(d)
   },
@@ -73,6 +74,10 @@ export const memoryStore: Store = {
       color: PROJECT_COLORS[d.projects.length % PROJECT_COLORS.length],
       course: input.course,
       type: input.type,
+      priority: input.priority ?? "completion",
+      notes: input.notes ?? "",
+      pinned: false,
+      pinCount: 0,
       targetMinutes: input.targetMinutes,
       assignedDate: input.assignedDate,
       dueDate: input.dueDate,

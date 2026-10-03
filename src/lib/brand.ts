@@ -12,10 +12,10 @@ export const GUIDANCE_MODES = {
       "Your plan is the plan. Tilly never moves blocks on her own — she nudges you to keep them, and only suggests changes.",
   },
   coach: {
-    label: "Coach",
+    label: "Lighthouse",
     short: "Propose, you approve",
     description:
-      "Tilly negotiates with you and proposes adjustments. Nothing changes until you say yes.",
+      "Tilly lights up a better route and proposes adjustments. Nothing changes until you say yes.",
   },
   autopilot: {
     label: "Tide",
@@ -27,8 +27,14 @@ export const GUIDANCE_MODES = {
 
 export const ASSIGNMENT_TYPES = {
   project: "Project",
+  exam: "Exam",
   homework: "Homework",
   reading: "Reading",
-  studying: "Studying",
-  writing: "Writing",
+} as const
+
+export const PRIORITIES = {
+  accuracy: { label: "Graded on accuracy", short: "Accuracy", weight: 1.35 },
+  completion: { label: "Graded on completion", short: "Completion", weight: 1 },
+  flexible: { label: "Flexible", short: "Flexible", weight: 0.8 },
+  optional: { label: "Optional", short: "Optional", weight: 0.5 },
 } as const

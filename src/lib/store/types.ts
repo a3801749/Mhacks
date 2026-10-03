@@ -1,4 +1,4 @@
-import type { AssignmentType, CalendarEvent, ScheduleChange, Settings, WeekData } from "../types"
+import type { AssignmentType, CalendarEvent, Priority, ScheduleChange, Settings, WeekData } from "../types"
 
 export interface EventPatch {
   status?: CalendarEvent["status"]
@@ -11,6 +11,9 @@ export interface ProjectPatch {
   name?: string
   course?: string
   type?: AssignmentType
+  priority?: Priority
+  notes?: string
+  pinned?: boolean
   targetMinutes?: number
   assignedDate?: string
   dueDate?: string
@@ -22,6 +25,8 @@ export interface NewProject {
   name: string
   course: string
   type: AssignmentType
+  priority?: Priority
+  notes?: string
   targetMinutes: number
   assignedDate: string
   dueDate: string

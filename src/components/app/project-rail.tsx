@@ -1,19 +1,15 @@
 "use client"
 
-import { CalendarClock, Plus, Settings2, TrendingUp } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { ASSIGNMENT_TYPES } from "@/lib/brand"
-import { projectHealth, type Pace } from "@/lib/analytics"
-import { formatDuration } from "@/lib/time"
+import Link from "next/link"
+import { ArrowRight, Pin, Sparkles } from "lucide-react"
+import { AGENT_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
+import { pinPreferenceLabel, pinPreferences, projectHealth, type ProjectHealth } from "@/lib/analytics"
+import { formatDue } from "@/lib/time"
 import type { Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { dueText, PaceTag, PinButton, ProgressBar } from "./assignment-bits"
 
-const PACE_COPY: Record<Pace, { label: string; className: string }> = {
-  done: { label: "Wrapped up", className: "bg-emerald-100 text-emerald-800" },
-  ahead: { label: "Fully scheduled", className: "bg-teal-100 text-teal-800" },
-  "on-track": { label: "Steady", className: "bg-sky-100 text-sky-800" },
-  behind: { label: "Needs a little room", className: "bg-amber-100 text-amber-800" },
-}
+const DUE_SOON = 3
 
 export function ProjectRail({
   data,
@@ -24,133 +20,138 @@ export function ProjectRail({
   data: WeekData
   today: string
   className?: string
-  onEdit?: (p: Project | "new") => void
+  onEdit: (p: Project) => void
 }) {
-  const health = projectHealth(data, today)
+  const health = projectHealth(data, today).sort((a, b) => a.project.dueDate.localeCompare(b.project.dueDate))
+  const pinned = health.filter((h) => h.project.pinned)
+  const soon = health.filter((h) => !h.project.pinned).slice(0, DUE_SOON)
+  const learned = pinPreferenceLabel(pinPreferences(data))
+
+  const classes = [...new Set(health.map((h) => h.project.course))]
+    .map((course) => {
+      const items = health.filter((h) => h.project.course === course)
+      return {
+        course,
+        color: items[0].project.color,
+        open: items.length,
+        next: items[0].project.dueDate,
+        behind: items.some((h) => h.pace === "behind"),
+      }
+    })
+    .sort((a, b) => a.next.localeCompare(b.next))
+
   return (
-    <section className={cn("space-y-3", className)} aria-labelledby="projects-heading">
+    <section className={cn("space-y-5", className)} aria-labelledby="overview-heading">
       <div className="flex items-baseline justify-between">
-        <h2 id="projects-heading" className="font-heading text-lg font-medium">
-          Assignments
+        <h2 id="overview-heading" className="font-heading text-lg font-medium">
+          Overview
         </h2>
-        {onEdit ? (
-          <Button variant="ghost" size="sm" onClick={() => onEdit("new")}>
-            <Plus /> New
-          </Button>
+        <Link href="/agenda" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          All assignments <ArrowRight className="size-3" />
+        </Link>
+      </div>
+
+      <div>
+        <SectionLabel>Classes</SectionLabel>
+        {classes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open assignments. Add one with “New assignment”.</p>
         ) : (
-          <span className="text-xs text-muted-foreground">{health.length} in motion</span>
+          <ul className="divide-y rounded-lg border bg-card">
+            {classes.map((c) => (
+              <li key={c.course}>
+                <Link
+                  href={`/agenda?course=${encodeURIComponent(c.course)}`}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-secondary/60"
+                >
+                  <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: c.color }} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.course}</span>
+                  {c.behind && <span className="size-1.5 rounded-full bg-amber-500" title="Something here is behind pace" />}
+                  <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                    {c.open} open · {formatDue(today, c.next)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-        {health.map((h) => {
-          const pace = PACE_COPY[h.pace]
-          return (
-            <article
-              key={h.project.id}
-              className="group min-w-[250px] rounded-2xl border bg-card p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] lg:min-w-0"
-            >
-              <div className="flex items-start gap-3">
-                <span
-                  className="mt-1.5 size-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: h.project.color }}
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium">
-                    {onEdit ? (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(h.project)}
-                        className="max-w-full truncate text-left underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
-                      >
-                        {h.project.name}
-                      </button>
-                    ) : (
-                      h.project.name
-                    )}
-                  </h3>
-                  <p className="mt-1 flex flex-wrap gap-1">
-                    <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                      {h.project.course}
-                    </span>
-                    <span className="rounded-md border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      {ASSIGNMENT_TYPES[h.project.type]}
-                    </span>
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                    <CalendarClock className="size-3" />
-                    {h.daysLeft === 0 ? "Due today" : `Due in ${h.daysLeft} day${h.daysLeft === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", pace.className)}>
-                    {pace.label}
-                  </span>
-                  {onEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Edit ${h.project.name}`}
-                      onClick={() => onEdit(h.project)}
-                      className="text-muted-foreground"
-                    >
-                      <Settings2 />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <WaveBar percent={h.percent} color={h.project.color} className="flex-1" />
-                <span className="w-9 text-right text-xs tabular-nums">{h.percent}%</span>
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <dt className="text-muted-foreground">Done</dt>
-                  <dd className="font-medium tabular-nums">{formatDuration(h.logged)}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Est. to go</dt>
-                  <dd className="font-medium tabular-nums">{formatDuration(h.remaining)}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Booked</dt>
-                  <dd className="font-medium tabular-nums">{formatDuration(h.scheduledAhead)}</dd>
-                </div>
-              </dl>
-              <p className="mt-2.5 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
-                <TrendingUp className="mt-px size-3 shrink-0" />
-                {h.estimate.explanation}
-              </p>
-            </article>
-          )
-        })}
+
+      <div>
+        <SectionLabel icon={<Pin className="size-3" />}>Pinned</SectionLabel>
+        {pinned.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+            Pin the assignments you want front and center. {AGENT_NAME} plans them first.
+          </p>
+        ) : (
+          <AssignmentList items={pinned} today={today} onEdit={onEdit} />
+        )}
       </div>
+
+      {soon.length > 0 && (
+        <div>
+          <SectionLabel>Due soon</SectionLabel>
+          <AssignmentList items={soon} today={today} onEdit={onEdit} />
+        </div>
+      )}
+
+      {learned && (
+        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+          <Sparkles className="mt-px size-3 shrink-0" />
+          You pin {learned} most, so {AGENT_NAME} plans them first.
+        </p>
+      )}
     </section>
   )
 }
 
-export function WaveBar({ percent, color, className }: { percent: number; color: string; className?: string }) {
+function SectionLabel({ children, icon }: { children: React.ReactNode; icon?: React.ReactNode }) {
   return (
-    <div
-      className={cn("relative h-2.5 overflow-hidden rounded-full bg-muted", className)}
-      role="progressbar"
-      aria-valuenow={percent}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <div
-        className="relative h-full overflow-hidden rounded-full transition-[width] duration-700"
-        style={{ width: `${Math.max(percent, 3)}%`, backgroundColor: color }}
-      >
-        <svg
-          className="absolute inset-y-0 left-0 h-full w-[200%] opacity-35 motion-safe:animate-[wave_6s_ease-in-out_infinite]"
-          viewBox="0 0 200 10"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          <path d="M0 5 Q 12.5 0 25 5 T 50 5 T 75 5 T 100 5 T 125 5 T 150 5 T 175 5 T 200 5 V10 H0 Z" fill="white" />
-        </svg>
-      </div>
-    </div>
+    <h3 className="mb-1.5 flex items-center gap-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      {icon}
+      {children}
+    </h3>
+  )
+}
+
+function AssignmentList({
+  items,
+  today,
+  onEdit,
+}: {
+  items: ProjectHealth[]
+  today: string
+  onEdit: (p: Project) => void
+}) {
+  return (
+    <ul className="divide-y rounded-lg border bg-card">
+      {items.map((h) => (
+        <li key={h.project.id} className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: h.project.color }} aria-hidden />
+            <button
+              type="button"
+              onClick={() => onEdit(h.project)}
+              className="min-w-0 flex-1 truncate text-left text-sm font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+            >
+              {h.project.name}
+            </button>
+            <PinButton project={h.project} className="-mr-1.5" />
+          </div>
+          <div className="mt-1 flex items-center gap-2 pl-4 text-xs text-muted-foreground">
+            <span className="whitespace-nowrap">{ASSIGNMENT_TYPES[h.project.type]}</span>
+            <span aria-hidden>·</span>
+            <span className={cn("whitespace-nowrap", h.daysLeft <= 1 && "font-medium text-foreground")}>
+              {dueText(today, h.project.dueDate)}
+            </span>
+            <span className="flex-1" />
+            <PaceTag pace={h.pace} />
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 pl-4">
+            <ProgressBar percent={h.percent} color={h.project.color} className="flex-1" />
+            <span className="w-8 text-right text-[11px] text-muted-foreground tabular-nums">{h.percent}%</span>
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }

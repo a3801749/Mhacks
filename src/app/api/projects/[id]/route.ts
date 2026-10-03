@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { handle } from "@/lib/api"
-import { ASSIGNMENT_TYPES } from "@/lib/brand"
+import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 import { getStore } from "@/lib/store"
 import type { ProjectPatch } from "@/lib/store/types"
 
@@ -13,6 +13,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/projects/[
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim().slice(0, 80)
   if (typeof body.course === "string" && body.course.trim()) patch.course = body.course.trim().slice(0, 40)
   if (body.type && body.type in ASSIGNMENT_TYPES) patch.type = body.type
+  if (body.priority && body.priority in PRIORITIES) patch.priority = body.priority
+  if (typeof body.notes === "string") patch.notes = body.notes.slice(0, 2000)
+  if (typeof body.pinned === "boolean") patch.pinned = body.pinned
   if (typeof body.targetMinutes === "number" && body.targetMinutes >= 15) patch.targetMinutes = Math.round(body.targetMinutes)
   if (body.assignedDate && DATE.test(body.assignedDate)) patch.assignedDate = body.assignedDate
   if (body.dueDate && DATE.test(body.dueDate)) patch.dueDate = body.dueDate

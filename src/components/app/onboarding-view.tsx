@@ -10,7 +10,7 @@ import {
   ArrowRight,
   CalendarRange,
   Check,
-  Compass,
+  Lighthouse,
   GanttChart,
   History,
   Layers,
@@ -34,7 +34,7 @@ import { TillyOrb } from "./voice-agent"
 export const ONBOARDED_KEY = "andy:onboarded"
 
 const STEPS = ["Welcome", "Guidance", "Extras", "First assignment", "Tour"] as const
-const MODE_ICONS = { anchor: Anchor, coach: Compass, autopilot: Waves }
+const MODE_ICONS = { anchor: Anchor, coach: Lighthouse, autopilot: Waves }
 
 export function OnboardingView() {
   const { data, today, api } = useApp()
@@ -295,7 +295,7 @@ function ExtraCard({
         <div className="flex items-center gap-3">
           <Switch checked={checked} disabled={disabled} onCheckedChange={(v) => onChange(Boolean(v))} aria-label={title} />
           <p className="font-medium">{title}</p>
-          {badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{badge}</span>}
+          {badge && <span className="rounded-sm bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{badge}</span>}
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{body}</p>
       </div>
@@ -354,7 +354,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Type</Label>
+          <Label>Category</Label>
           <div className="flex flex-wrap gap-1.5">
             {(Object.keys(ASSIGNMENT_TYPES) as AssignmentType[]).map((t) => (
               <button
@@ -362,7 +362,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
                 type="button"
                 onClick={() => setType(t)}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-sm transition-colors",
+                  "rounded-md border px-3 py-1 text-sm transition-colors",
                   type === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary",
                 )}
               >

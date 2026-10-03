@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { handle } from "@/lib/api"
 import { getStore } from "@/lib/store"
 import type { NewProject } from "@/lib/store/types"
-import { ASSIGNMENT_TYPES } from "@/lib/brand"
+import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
       name,
       course: body.course?.trim().slice(0, 40) || "General",
       type: body.type!,
+      priority: body.priority && body.priority in PRIORITIES ? body.priority : "completion",
+      notes: typeof body.notes === "string" ? body.notes.slice(0, 2000) : "",
       targetMinutes,
       assignedDate: body.assignedDate!,
       dueDate: body.dueDate!,

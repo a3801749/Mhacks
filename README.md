@@ -20,7 +20,7 @@ The AI doesn't do the reflecting for you — it compiles the numbers so reflecti
 | **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, on-pace / behind status | `timeline-view.tsx` |
 | **Backtracking reflection** | Deterministic stats + a Gemini-compiled summary, patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
 | **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead"); Gemini negotiates, ElevenLabs speaks; accept / decline / undo | `voice-agent.tsx` |
-| **Guidance modes** | *Anchor* (strict baseline), *Coach* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
+| **Guidance modes** | *Anchor* (strict baseline), *Lighthouse* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
 
 Optional features (daily check-in, AI planner, screen time) are toggled in Settings. Screen time is shown as
 "coming soon" — it needs a browser extension.

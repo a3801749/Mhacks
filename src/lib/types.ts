@@ -4,7 +4,10 @@ export type EventStatus = "planned" | "completed" | "partial" | "skipped"
 
 export type EventKind = "work" | "life"
 
-export type AssignmentType = "project" | "homework" | "reading" | "studying" | "writing"
+export type AssignmentType = "project" | "exam" | "homework" | "reading"
+
+/** How the work is graded, which decides how much care it deserves. */
+export type Priority = "accuracy" | "completion" | "flexible" | "optional"
 
 export interface Project {
   id: string
@@ -12,6 +15,11 @@ export interface Project {
   color: string
   course: string
   type: AssignmentType
+  priority: Priority
+  notes: string
+  pinned: boolean
+  /** How many times this has ever been pinned; the planner learns from it. */
+  pinCount: number
   targetMinutes: number
   assignedDate: string
   dueDate: string

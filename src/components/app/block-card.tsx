@@ -68,7 +68,7 @@ export function BlockCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {isNow && event.status === "planned" ? (
-            <span className="relative inline-flex items-center gap-1.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
+            <span className="relative inline-flex items-center gap-1.5 rounded-sm bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
               <span className="relative flex size-1.5">
                 <span className="absolute inset-0 rounded-full bg-white motion-safe:animate-[breathe_2s_ease-in-out_infinite]" />
                 <span className="relative size-1.5 rounded-full bg-white" />
@@ -79,7 +79,7 @@ export function BlockCard({
             status && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
+                  "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-[11px] font-medium ring-1",
                   status.className,
                 )}
               >

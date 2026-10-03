@@ -420,7 +420,7 @@ export function TillyOrb({ active, className }: { active?: boolean; className?: 
       {active && (
         <span className="absolute inset-0 rounded-full bg-primary/40 motion-safe:animate-[breathe_1.6s_ease-in-out_infinite]" />
       )}
-      <span className="relative size-10 rounded-full bg-[radial-gradient(circle_at_30%_30%,#9fe0d8,#3e8f95_55%,#2b5f78)] shadow-inner" />
+      <span className="relative size-10 rounded-full bg-primary" />
       <span className="absolute top-[38%] left-[34%] size-1.5 rounded-full bg-white/90" />
       <span className="absolute top-[38%] right-[34%] size-1.5 rounded-full bg-white/90" />
       <span className="absolute bottom-[30%] h-1 w-2.5 rounded-b-full border-b-2 border-white/80" />

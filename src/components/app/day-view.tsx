@@ -96,7 +96,7 @@ export function DayTimeline({
           <p className="mt-0.5 text-sm text-muted-foreground">{summary}</p>
         </div>
         {isPastDay && (
-          <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+          <span className="rounded-sm bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
             Looking back
           </span>
         )}

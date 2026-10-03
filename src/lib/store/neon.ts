@@ -47,10 +47,11 @@ async function seed(sql: Sql, today: string) {
                 ${s.settings.aiPlannerEnabled}, ${s.settings.screenTimeEnabled})`,
     ...s.projects.map(
       (p) =>
-        sql`INSERT INTO projects (id, user_id, name, color, course, type, target_minutes, assigned_date, due_date,
-                                  progress_percent, completed_date)
-            VALUES (${p.id}, ${USER_ID}, ${p.name}, ${p.color}, ${p.course}, ${p.type}, ${p.targetMinutes},
-                    ${p.assignedDate}, ${p.dueDate}, ${p.progressPercent}, ${p.completedDate})`,
+        sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, pinned, pin_count,
+                                  target_minutes, assigned_date, due_date, progress_percent, completed_date)
+            VALUES (${p.id}, ${USER_ID}, ${p.name}, ${p.color}, ${p.course}, ${p.type}, ${p.priority}, ${p.notes},
+                    ${p.pinned}, ${p.pinCount}, ${p.targetMinutes}, ${p.assignedDate}, ${p.dueDate},
+                    ${p.progressPercent}, ${p.completedDate})`,
     ),
     ...s.tasks.map(
       (t) =>
@@ -85,7 +86,7 @@ async function load(): Promise<WeekData> {
   const { sql } = client()
   const [users, projects, tasks, events, logs, checkIns] = await Promise.all([
     sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
-    sql`SELECT id, name, color, course, type, target_minutes, progress_percent,
+    sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, target_minutes, progress_percent,
                to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
                to_char(completed_date, 'YYYY-MM-DD') AS completed_date
         FROM projects WHERE user_id = ${USER_ID} ORDER BY id`,
@@ -116,6 +117,10 @@ async function load(): Promise<WeekData> {
         color: r.color,
         course: r.course,
         type: r.type,
+        priority: r.priority,
+        notes: r.notes,
+        pinned: r.pinned,
+        pinCount: r.pin_count,
         targetMinutes: r.target_minutes,
         assignedDate: r.assigned_date,
         dueDate: r.due_date,
@@ -227,6 +232,10 @@ export const neonStore: Store = {
         name = COALESCE(${patch.name ?? null}, name),
         course = COALESCE(${patch.course ?? null}, course),
         type = COALESCE(${patch.type ?? null}, type),
+        priority = COALESCE(${patch.priority ?? null}, priority),
+        notes = COALESCE(${patch.notes ?? null}, notes),
+        pin_count = CASE WHEN ${patch.pinned === true} AND NOT pinned THEN pin_count + 1 ELSE pin_count END,
+        pinned = COALESCE(${patch.pinned ?? null}::boolean, pinned),
         target_minutes = COALESCE(${patch.targetMinutes ?? null}::int, target_minutes),
         assigned_date = COALESCE(${patch.assignedDate ?? null}::date, assigned_date),
         due_date = COALESCE(${patch.dueDate ?? null}::date, due_date),
@@ -243,9 +252,11 @@ export const neonStore: Store = {
     const [{ count }] = await sql`SELECT count(*)::int AS count FROM projects WHERE user_id = ${USER_ID}`
     const id = `p-${Date.now().toString(36)}`
     await sql.transaction([
-      sql`INSERT INTO projects (id, user_id, name, color, course, type, target_minutes, assigned_date, due_date)
+      sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, target_minutes,
+                                assigned_date, due_date)
           VALUES (${id}, ${USER_ID}, ${input.name}, ${PROJECT_COLORS[count % PROJECT_COLORS.length]}, ${input.course},
-                  ${input.type}, ${input.targetMinutes}, ${input.assignedDate}, ${input.dueDate})`,
+                  ${input.type}, ${input.priority ?? "completion"}, ${input.notes ?? ""}, ${input.targetMinutes},
+                  ${input.assignedDate}, ${input.dueDate})`,
       sql`INSERT INTO tasks (id, project_id, title, estimate_minutes)
           VALUES (${`t-${Date.now().toString(36)}`}, ${id}, ${input.firstTask}, ${input.targetMinutes})`,
     ])

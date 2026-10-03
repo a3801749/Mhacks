@@ -1,15 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CheckCircle2, Loader2, Pin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { APP_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { APP_NAME, ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 import { estimateProject } from "@/lib/analytics"
 import { addDays, formatDuration } from "@/lib/time"
-import type { AssignmentType, Project, WeekData } from "@/lib/types"
+import type { AssignmentType, Priority, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import type { WeekApi } from "@/hooks/use-week"
 
@@ -62,6 +64,9 @@ function ProjectForm({
   const [name, setName] = useState(p?.name ?? "")
   const [course, setCourse] = useState(p?.course ?? "")
   const [type, setType] = useState<AssignmentType>(p?.type ?? "homework")
+  const [priority, setPriority] = useState<Priority>(p?.priority ?? "completion")
+  const [notes, setNotes] = useState(p?.notes ?? "")
+  const [pinned, setPinned] = useState(p?.pinned ?? false)
   const [hours, setHours] = useState(String(p ? +(p.targetMinutes / 60).toFixed(1) : 3))
   const [assigned, setAssigned] = useState(p?.assignedDate ?? today)
   const [due, setDue] = useState(p?.dueDate ?? addDays(today, 7))
@@ -77,6 +82,10 @@ function ProjectForm({
       color: "#000",
       course: course || "General",
       type,
+      priority,
+      notes,
+      pinned: false,
+      pinCount: 0,
       targetMinutes: Math.round(Number(hours) * 60) || 60,
       assignedDate: assigned,
       dueDate: due,
@@ -89,9 +98,14 @@ function ProjectForm({
     e.preventDefault()
     setSaving("save")
     const targetMinutes = Math.round(Number(hours) * 60)
-    const ok = isNew
-      ? await api.createProject({ name, course, type, targetMinutes, assignedDate: assigned, dueDate: due, firstTask })
-      : await api.updateProject(p!.id, { name, course, type, targetMinutes, assignedDate: assigned, dueDate: due }, "Saved")
+    const fields = { name, course, type, priority, notes, targetMinutes, assignedDate: assigned, dueDate: due }
+    let ok = isNew
+      ? await api.createProject({ ...fields, firstTask })
+      : await api.updateProject(p!.id, { ...fields, pinned }, "Saved")
+    if (ok && isNew && pinned) {
+      const created = ok.projects.find((x) => !data.projects.some((d) => d.id === x.id))
+      if (created) ok = await api.togglePin(created.id, true)
+    }
     setSaving(null)
     if (ok) onDone()
   }
@@ -101,7 +115,7 @@ function ProjectForm({
       <DialogHeader>
         <DialogTitle className="font-heading text-xl font-medium">{isNew ? "New assignment" : "Edit assignment"}</DialogTitle>
         <DialogDescription>
-          Tagging the course and type lets {APP_NAME} learn which kinds of work run long for you.
+          Course, category and priority help {APP_NAME} learn what runs long and what to plan first.
         </DialogDescription>
       </DialogHeader>
 
@@ -121,24 +135,23 @@ function ProjectForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Type</Label>
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Assignment type">
-          {(Object.keys(ASSIGNMENT_TYPES) as AssignmentType[]).map((t) => (
-            <button
-              type="button"
-              key={t}
-              role="radio"
-              aria-checked={type === t}
-              onClick={() => setType(t)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-sm transition-colors",
-                type === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary",
-              )}
-            >
-              {ASSIGNMENT_TYPES[t]}
-            </button>
-          ))}
-        </div>
+        <Label>Category</Label>
+        <ChoiceRow
+          label="Category of work"
+          options={(Object.keys(ASSIGNMENT_TYPES) as AssignmentType[]).map((t) => ({ value: t, label: ASSIGNMENT_TYPES[t] }))}
+          value={type}
+          onChange={setType}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Priority</Label>
+        <ChoiceRow
+          label="Priority"
+          options={(Object.keys(PRIORITIES) as Priority[]).map((t) => ({ value: t, label: PRIORITIES[t].label }))}
+          value={priority}
+          onChange={setPriority}
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -163,7 +176,26 @@ function ProjectForm({
         </div>
       )}
 
-      <p className="rounded-xl bg-secondary/70 p-3 text-sm text-secondary-foreground">
+      <div className="space-y-1.5">
+        <Label htmlFor="pnotes">Notes</Label>
+        <Textarea
+          id="pnotes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Rubric details, links, what the professor said in class…"
+          rows={3}
+          maxLength={2000}
+        />
+      </div>
+
+      <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+        <span className="flex items-center gap-2">
+          <Pin className="size-4 text-muted-foreground" /> Pin to Today
+        </span>
+        <Switch checked={pinned} onCheckedChange={setPinned} />
+      </label>
+
+      <p className="rounded-md bg-secondary/70 p-3 text-sm text-secondary-foreground">
         <span className="font-medium">Likely total: {formatDuration(estimate.total)}.</span> {estimate.explanation}
       </p>
 
@@ -193,5 +225,37 @@ function ProjectForm({
         </Button>
       </div>
     </form>
+  )
+}
+
+function ChoiceRow<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button
+          type="button"
+          key={o.value}
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "rounded-md border px-2.5 py-1 text-sm transition-colors",
+            value === o.value ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   )
 }
