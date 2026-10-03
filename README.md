@@ -10,13 +10,14 @@ The AI doesn't do the reflecting for you — it compiles the numbers so reflecti
 
 | Page / feature | What it does | Where |
 | --- | --- | --- |
-| **Today** | Rolling window (4 days back, today, 2 ahead), calm block cards, planned-vs-actual fill, live *now* line | `src/components/app/today-view.tsx`, `day-view.tsx` |
-| **Assignments** | Tagged by **course** and **type** (project, homework, reading, studying, writing), with assigned/due dates and adaptive estimates | `project-rail.tsx`, `project-dialog.tsx` |
+| **Today** | Rolling window (4 days back, today, 2 ahead), calm block cards, planned-vs-actual fill, live *now* line. The left rail is a compact overview: classes, pinned assignments, and what is due soon | `today-view.tsx`, `day-view.tsx`, `project-rail.tsx` |
+| **Agenda** | All assignments and events, filtered by class and category and sorted by due date, priority, pins, progress, or time left. Month calendar shaded green / orange / red by how busy the day is. Schedule a work session or event from the day | `agenda-view.tsx`, `schedule-dialog.tsx` |
+| **Assignments** | Course, category (project, exam, homework, reading), and priority (accuracy, completion, flexible, optional). Notes, pin, assigned/due dates, adaptive estimates | `project-dialog.tsx`, `assignment-bits.tsx` |
 | **Task-integrated blocks** | Open a block to see total time on the task, the progress trail, quick-log buttons, and "how far along are you?" | `block-dialog.tsx` |
 | **Adaptive estimates** | Time left comes from your reported progress and pace, blended with how long finished assignments of the same course + type really took | `estimateProject()` in `src/lib/analytics.ts` |
 | **Daily check-in** (opt-in) | One tap, 1–10, once a day. Feeds "after late nights you rate your day 4.4 vs 7.2" style insights | `check-in-card.tsx`, `moodCorrelation()` |
 | **Plan** | Week grid: drag out a block (tap on mobile) and Tilly suggests how to split it across your tasks, or pick one task yourself | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
-| **Rhythm** | Screen-time-style view for projects: when in the day you work (midnight → midnight), stacked by assignment, course, or type, over a week or month; wind-down trend; "how long things really take" | `rhythm-view.tsx` |
+| **Rhythm** | When in the day you work (midnight → midnight), stacked by assignment, course, or category, over a week or month; wind-down trend; "how long things really take" | `rhythm-view.tsx` |
 | **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, on-pace / behind status | `timeline-view.tsx` |
 | **Backtracking reflection** | Deterministic stats + a Gemini-compiled summary, patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
 | **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead"); Gemini negotiates, ElevenLabs speaks; accept / decline / undo | `voice-agent.tsx` |
@@ -47,6 +48,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 
 ## Docs
 
+- [`docs/ai-handoff.md`](docs/ai-handoff.md): architecture, data model, and conventions for anyone (including other coding agents) changing this repo. `AGENTS.md` points here.
 - [`docs/demo-walkthrough.md`](docs/demo-walkthrough.md): a step-by-step demo script covering every feature
 - [`docs/onboarding.md`](docs/onboarding.md): the onboarding flow (live at `/welcome`) and the reasoning behind it
 - [`docs/screen-time-extension.md`](docs/screen-time-extension.md): how to build the screen-time browser extension
@@ -56,7 +58,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 - **Gemini system prompts** live in `src/lib/ai/prompts.ts`. The adjust prompt takes `{ now, schedule, projects, tasks, stats, conversation, message }`
   and returns `{ reply, changes[] }` via a JSON response schema. Changes are validated server-side
   (`src/lib/ai/engine.ts`) so hallucinated ids or edits to the past are dropped.
-- **Neon schema** is in `db/schema.sql` — `users`, `projects` (assignments with course/type/progress), `tasks`,
+- **Neon schema** is in `db/schema.sql` — `users`, `projects` (assignments with course, category, priority, notes, pin, progress), `tasks`,
   `events` (planned start/end + `actual_minutes`), an append-only `time_logs` time series, and `check_ins`.
 - **Demo data** (`src/lib/seed.ts`) includes a month of history: finished assignments that train the estimate model,
   a late-night drift on the thesis, and daily ratings that dip after late nights.
@@ -73,7 +75,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 | `/api/events/:id/log` | POST | Log `{ minutes, note }` against a block's task |
 | `/api/tasks/:id` | PATCH | `{ done }` |
 | `/api/projects` | POST | Create an assignment |
-| `/api/projects/:id` | PATCH | Edit tags, dates, estimate, progress, or mark finished |
+| `/api/projects/:id` | PATCH | Edit category, priority, notes, pin, dates, estimate, progress, or mark finished |
 | `/api/checkins` | PUT | `{ date, rating, note }` |
 | `/api/plan` | POST | `{ date, startMin, endMin }` → suggested breakdown |
 | `/api/schedule/adjust` | POST | `{ message, history, now }` → `{ reply, changes, autoApplied }` |
