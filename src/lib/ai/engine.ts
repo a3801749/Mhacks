@@ -11,6 +11,7 @@ import {
   taskLogged,
 } from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
+import { sanitizeScheduleChanges } from "../schedule-validation"
 import { mockAdjust, mockReflect } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
@@ -62,20 +63,6 @@ function context(data: WeekData, today: string) {
   }
 }
 
-/** Drops hallucinated ids, edits to the past, and out-of-range times. */
-function sanitize(changes: ScheduleChange[], data: WeekData, now: Now): ScheduleChange[] {
-  return changes.filter((c) => {
-    const inRange = (m?: number) => m == null || (m >= 0 && m <= 24 * 60)
-    if (!inRange(c.startMin) || !inRange(c.endMin)) return false
-    if (c.date && c.date < now.date) return false
-    if (c.action === "create") return Boolean(c.date && c.startMin != null && c.endMin != null)
-    const e = data.events.find((x) => x.id === c.eventId)
-    if (!e || e.status !== "planned") return false
-    if (c.action === "move" && (c.date ?? e.date) === e.date && (c.startMin ?? e.startMin) === e.startMin) return false
-    return e.date > now.date || (e.date === now.date && e.endMin > now.minute)
-  })
-}
-
 export async function adjustSchedule(
   data: WeekData,
   message: string,
@@ -96,15 +83,17 @@ export async function adjustSchedule(
         },
         ADJUST_RESPONSE_SCHEMA,
       )
-      return { reply: out.reply, changes: sanitize(out.changes ?? [], data, now), source: "gemini" }
+      return { reply: out.reply, changes: sanitizeScheduleChanges(out.changes, data, now), source: "gemini" }
     } catch (err) {
       console.error("[gemini] adjust failed, using fallback:", err)
     }
   }
-  return mockAdjust(data, message, history, now)
+  const fallback = mockAdjust(data, message, history, now)
+  return { ...fallback, changes: sanitizeScheduleChanges(fallback.changes, data, now) }
 }
 
-export async function reflect(data: WeekData, today: string): Promise<Reflection> {
+export async function reflect(data: WeekData, today: string, minute = 0): Promise<Reflection> {
+  const now = { date: today, minute }
   if (geminiEnabled()) {
     try {
       const ctx = context(data, today)
@@ -124,12 +113,11 @@ export async function reflect(data: WeekData, today: string): Promise<Reflection
         },
         REFLECT_RESPONSE_SCHEMA,
       )
-      const now = { date: today, minute: 0 }
       return {
         ...out,
         suggestions: (out.suggestions ?? []).map((s) => ({
           ...s,
-          change: s.change && sanitize([s.change], data, now).length ? s.change : undefined,
+          change: s.change && sanitizeScheduleChanges([s.change], data, now)[0],
         })),
         source: "gemini",
       }
@@ -137,7 +125,10 @@ export async function reflect(data: WeekData, today: string): Promise<Reflection
       console.error("[gemini] reflect failed, using fallback:", err)
     }
   }
-  return mockReflect(data, today)
+  const fallback = mockReflect(data, today)
+  return { ...fallback, suggestions: fallback.suggestions.map((s) => ({
+    ...s, change: s.change && sanitizeScheduleChanges([s.change], data, now)[0],
+  })) }
 }
 
 export async function planBlock(data: WeekData, block: PlanBlock, today: string): Promise<PlanBreakdown> {

@@ -1,10 +1,12 @@
-import type { AssignmentType, CalendarEvent, Priority, ScheduleChange, Settings, WeekData } from "../types"
+import type { AppliedWeek, AssignmentType, CalendarEvent, Priority, ScheduleChange, Settings, WeekData } from "../types"
 
 export interface EventPatch {
   status?: CalendarEvent["status"]
   date?: string
   startMin?: number
   endMin?: number
+  movedFromDate?: string | null
+  movedFromStartMin?: number | null
 }
 
 export interface ProjectPatch {
@@ -46,11 +48,12 @@ export interface Store {
   deleteLog(logId: string): Promise<WeekData>
   reorderPins(projectIds: string[]): Promise<WeekData>
   updateEvent(eventId: string, patch: EventPatch): Promise<WeekData>
+  deleteEvent(eventId: string): Promise<WeekData>
   setTaskDone(taskId: string, done: boolean): Promise<WeekData>
   updateProject(projectId: string, patch: ProjectPatch): Promise<WeekData>
   createProject(project: NewProject): Promise<WeekData>
   saveCheckIn(date: string, rating: number, note: string): Promise<WeekData>
-  applyChanges(changes: ScheduleChange[]): Promise<WeekData>
+  applyChanges(changes: ScheduleChange[]): Promise<AppliedWeek>
   updateSettings(settings: Settings): Promise<WeekData>
   reset(today: string): Promise<WeekData>
 }

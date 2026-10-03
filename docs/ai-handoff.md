@@ -134,7 +134,9 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 `src/lib/ai/engine.ts` calls Gemini (`gemini-2.5-flash`, JSON schema) when `GEMINI_API_KEY` is set, and `fallback.ts` / `mockBreakdown` otherwise. Failures fall back; they do not 500 the request.
 
-`sanitize` drops changes that edit the past, use unknown ids, have out-of-range times, or move a block onto its current slot. Do not apply model output without it.
+`sanitizeScheduleChanges` in `schedule-validation.ts` checks real assignment/task ids, positive intervals, local dates, past destinations, waking hours (8am–10pm), and overlaps, including within a batch. Both Gemini and local proposals go through it. The apply API validates references and intervals again and rejects stale proposals targeting a block that is no longer planned. Manual scheduling still permits overlaps and unassigned focus blocks.
+
+Schedule application returns `createdEventIds` and `previousEvents` for that operation. Tilly uses them for Undo: newly added blocks are deleted and existing blocks restore their times, status, and original move history. A new block with logged work cannot be deleted. Failures leave the turn available for retry instead of falsely marking it undone.
 
 Guidance prompt text is `MODE_RULES` in `prompts.ts`. Lighthouse is still the `coach` key there.
 
@@ -149,7 +151,7 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | Route | Method | Body / behavior |
 | --- | --- | --- |
 | `/api/week?today=` | GET | Full `WeekData` plus integration flags |
-| `/api/events/:id` | PATCH | status, date, startMin, endMin |
+| `/api/events/:id` | PATCH / DELETE | Update status, date, startMin, endMin, or move history; delete an unworked block for Undo |
 | `/api/events/:id/log` | POST | `{ minutes, note }` — ±1 to 720; negative takes time off. Updates `actual_minutes` and appends a time log |
 | `/api/logs/:id` | PATCH / DELETE | Edit `{ minutes, note }` or remove a trail entry; the event's actual time follows |
 | `/api/projects/pin-order` | PUT | `{ ids }` in display order |

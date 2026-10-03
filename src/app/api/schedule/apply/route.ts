@@ -1,10 +1,20 @@
 import type { NextRequest } from "next/server"
-import { handle } from "@/lib/api"
+import { handle, todayFrom } from "@/lib/api"
 import { getStore } from "@/lib/store"
-import type { ScheduleChange } from "@/lib/types"
+import { validateScheduleChanges } from "@/lib/schedule-validation"
+import { RequestError } from "@/lib/errors"
 
 export async function POST(req: NextRequest) {
-  const { changes } = (await req.json()) as { changes: ScheduleChange[] }
-  if (!Array.isArray(changes)) return Response.json({ error: "changes must be an array" }, { status: 400 })
-  return handle(() => getStore().applyChanges(changes))
+  return handle(async () => {
+    const body = await req.json().catch(() => null)
+    const store = getStore()
+    const week = await store.getWeek(todayFrom(body?.today))
+    let changes
+    try {
+      changes = validateScheduleChanges(body?.changes, week)
+    } catch (err) {
+      throw new RequestError(err instanceof Error ? err.message : "Invalid schedule changes")
+    }
+    return store.applyChanges(changes)
+  })
 }

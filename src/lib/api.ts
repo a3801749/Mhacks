@@ -1,5 +1,6 @@
 import "server-only"
 import { toDateKey } from "./time"
+import { RequestError } from "./errors"
 
 export function todayFrom(value: unknown): string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateKey(new Date())
@@ -9,8 +10,8 @@ export async function handle<T>(fn: () => Promise<T>) {
   try {
     return Response.json(await fn())
   } catch (err) {
-    console.error(err)
+    if (!(err instanceof RequestError)) console.error(err)
     const message = err instanceof Error ? err.message : "Something went wrong"
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: message }, { status: err instanceof RequestError ? err.status : 500 })
   }
 }
