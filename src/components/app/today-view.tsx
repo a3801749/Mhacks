@@ -1,6 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { Compass, X } from "lucide-react"
+import { APP_NAME } from "@/lib/brand"
+import { ONBOARDED_KEY } from "./onboarding-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { windowDates } from "@/lib/analytics"
 import { useApp } from "./app-shell"
@@ -26,6 +30,7 @@ export function TodayView() {
 
   return (
     <>
+      <TourBanner />
       <div className="hidden gap-6 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[290px_minmax(0,1fr)_370px]">
         <aside className="lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:pb-6">
           {rail}
@@ -56,5 +61,39 @@ export function TodayView() {
         </TabsContent>
       </Tabs>
     </>
+  )
+}
+
+function TourBanner() {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after mount
+    setShow(!localStorage.getItem(ONBOARDED_KEY))
+  }, [])
+  if (!show) return null
+  return (
+    <div className="mb-5 flex items-center gap-3 rounded-2xl border border-primary/30 bg-accent/60 px-4 py-3">
+      <Compass className="size-5 shrink-0 text-primary" />
+      <p className="flex-1 text-sm">
+        <span className="font-medium">New to {APP_NAME}?</span>{" "}
+        <span className="text-muted-foreground">Take the one-minute setup and tour of how everything fits together.</span>
+      </p>
+      <Link
+        href="/welcome"
+        className="rounded-full bg-primary px-3 py-1.5 text-sm font-medium whitespace-nowrap text-primary-foreground"
+      >
+        Start tour
+      </Link>
+      <button
+        aria-label="Dismiss"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => {
+          localStorage.setItem(ONBOARDED_KEY, "1")
+          setShow(false)
+        }}
+      >
+        <X className="size-4" />
+      </button>
+    </div>
   )
 }

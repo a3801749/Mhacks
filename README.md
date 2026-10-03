@@ -45,6 +45,12 @@ Voice **input** uses the browser's Web Speech API (Chrome / Edge). Other browser
 
 The settings dialog (top-right mode button) shows which services are live and has a **Reset demo week** button.
 
+## Docs
+
+- [`docs/demo-walkthrough.md`](docs/demo-walkthrough.md): a step-by-step demo script covering every feature
+- [`docs/onboarding.md`](docs/onboarding.md): the onboarding flow (live at `/welcome`) and the reasoning behind it
+- [`docs/screen-time-extension.md`](docs/screen-time-extension.md): how to build the screen-time browser extension
+
 ## Team handoff notes
 
 - **Gemini system prompts** live in `src/lib/ai/prompts.ts`. The adjust prompt takes `{ now, schedule, projects, tasks, stats, conversation, message }`

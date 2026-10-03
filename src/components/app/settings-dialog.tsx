@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Anchor, Compass, Loader2, RotateCcw, Waves } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -131,6 +132,13 @@ export function SettingsDialog({
           {saving === "reset" ? <Loader2 className="animate-spin" /> : <RotateCcw />}
           Reset demo week
         </Button>
+        <Link
+          href="/welcome"
+          onClick={() => onOpenChange(false)}
+          className="text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+        >
+          Replay the welcome tour
+        </Link>
       </DialogContent>
     </Dialog>
   )
