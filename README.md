@@ -1,21 +1,29 @@
-# Ebb — a reflective calendar
+# Andy — a reflective calendar
 
 > Working name. Rename it in `src/lib/brand.ts`.
 
-Ebb looks back before it plans ahead. Instead of a rigid forward grid, it shows how you **actually** spent your time,
+Andy looks back before it plans ahead. Instead of a rigid forward grid, it shows how you **actually** spent your time,
 ties tasks directly to work blocks, and has a voice companion (Tilly) you can talk to when your day blows up.
 The AI doesn't do the reflecting for you — it compiles the numbers so reflecting takes seconds instead of a spreadsheet.
 
 ## What's in this MVP
 
-| Feature | Where |
-| --- | --- |
-| **Reflective calendar** — rolling window (4 days back, today, 2 ahead), day strip with planned-vs-actual fill, calm block cards, "breathing room" gaps, live *now* line | `src/components/ebb/day-view.tsx`, `block-card.tsx` |
-| **Active projects** — progress, time to go, time booked, gentle pace labels instead of red alarms | `project-rail.tsx` |
-| **Task-integrated work blocks** — open a block to see total time on the task, a momentum message, the progress trail of past sessions, and quick-log buttons | `block-dialog.tsx` |
-| **Backtracking analysis** — deterministic stats (follow-through, by day, by time of day, estimate drift) + a Gemini-compiled summary, habits, one-click schedule shifts, and reflection questions | `src/lib/analytics.ts`, `reflect-panel.tsx` |
-| **Voice agent (Tilly)** — speak or type ("I'm ordering pizza instead"); Gemini negotiates changes, ElevenLabs speaks the reply; accept / decline / undo | `voice-agent.tsx`, `/api/schedule/adjust`, `/api/tts` |
-| **Adaptive guidance modes** — *Anchor* (strict baseline, pushes back first), *Coach* (proposes, you approve), *Tide* (applies changes automatically) | `settings-dialog.tsx`, `src/lib/ai/prompts.ts` |
+| Page / feature | What it does | Where |
+| --- | --- | --- |
+| **Today** | Rolling window (4 days back, today, 2 ahead), calm block cards, planned-vs-actual fill, live *now* line | `src/components/app/today-view.tsx`, `day-view.tsx` |
+| **Assignments** | Tagged by **course** and **type** (project, homework, reading, studying, writing), with assigned/due dates and adaptive estimates | `project-rail.tsx`, `project-dialog.tsx` |
+| **Task-integrated blocks** | Open a block to see total time on the task, the progress trail, quick-log buttons, and "how far along are you?" | `block-dialog.tsx` |
+| **Adaptive estimates** | Time left comes from your reported progress and pace, blended with how long finished assignments of the same course + type really took | `estimateProject()` in `src/lib/analytics.ts` |
+| **Daily check-in** (opt-in) | One tap, 1–10, once a day. Feeds "after late nights you rate your day 4.4 vs 7.2" style insights | `check-in-card.tsx`, `moodCorrelation()` |
+| **Plan** | Week grid: drag out a block (tap on mobile) and Tilly suggests how to split it across your tasks, or pick one task yourself | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
+| **Rhythm** | Screen-time-style view for projects: when in the day you work (midnight → midnight), stacked by assignment, course, or type, over a week or month; wind-down trend; "how long things really take" | `rhythm-view.tsx` |
+| **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, on-pace / behind status | `timeline-view.tsx` |
+| **Backtracking reflection** | Deterministic stats + a Gemini-compiled summary, patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
+| **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead"); Gemini negotiates, ElevenLabs speaks; accept / decline / undo | `voice-agent.tsx` |
+| **Guidance modes** | *Anchor* (strict baseline), *Coach* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
+
+Optional features (daily check-in, AI planner, screen time) are toggled in Settings. Screen time is shown as
+"coming soon" — it needs a browser extension.
 
 ## Run it
 
@@ -42,8 +50,10 @@ The settings dialog (top-right mode button) shows which services are live and ha
 - **Gemini system prompts** live in `src/lib/ai/prompts.ts`. The adjust prompt takes `{ now, schedule, projects, tasks, stats, conversation, message }`
   and returns `{ reply, changes[] }` via a JSON response schema. Changes are validated server-side
   (`src/lib/ai/engine.ts`) so hallucinated ids or edits to the past are dropped.
-- **Neon schema** is in `db/schema.sql` — `users`, `projects`, `tasks`, `events` (planned start/end + `actual_minutes`),
-  and an append-only `time_logs` time series.
+- **Neon schema** is in `db/schema.sql` — `users`, `projects` (assignments with course/type/progress), `tasks`,
+  `events` (planned start/end + `actual_minutes`), an append-only `time_logs` time series, and `check_ins`.
+- **Demo data** (`src/lib/seed.ts`) includes a month of history: finished assignments that train the estimate model,
+  a late-night drift on the thesis, and daily ratings that dip after late nights.
 - **Default voice** settings are in `src/lib/voice.ts`. Swap `ELEVENLABS_VOICE_ID` for a custom Voice Design voice when ready.
 - **Figma → code**: colors and radii are CSS variables in `src/app/globals.css`; headings use Fraunces, body uses Geist.
   UI primitives are shadcn/ui (`src/components/ui`).
@@ -56,10 +66,14 @@ The settings dialog (top-right mode button) shows which services are live and ha
 | `/api/events/:id` | PATCH | Update status / time |
 | `/api/events/:id/log` | POST | Log `{ minutes, note }` against a block's task |
 | `/api/tasks/:id` | PATCH | `{ done }` |
+| `/api/projects` | POST | Create an assignment |
+| `/api/projects/:id` | PATCH | Edit tags, dates, estimate, progress, or mark finished |
+| `/api/checkins` | PUT | `{ date, rating, note }` |
+| `/api/plan` | POST | `{ date, startMin, endMin }` → suggested breakdown |
 | `/api/schedule/adjust` | POST | `{ message, history, now }` → `{ reply, changes, autoApplied }` |
 | `/api/schedule/apply` | POST | Apply `{ changes }` |
 | `/api/reflect` | POST | Backtracking reflection |
-| `/api/settings` | PUT | `{ guidanceMode }` |
+| `/api/settings` | PUT | `{ guidanceMode?, checkInEnabled?, aiPlannerEnabled? }` |
 | `/api/tts` | POST | `{ text }` → `audio/mpeg` (501 when ElevenLabs isn't configured) |
 | `/api/reset` | POST | Restore the demo week |
 

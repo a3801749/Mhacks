@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], axes: ["SOFT", "opsz"] })
 
 export const metadata: Metadata = {
-  title: `${APP_NAME} — reflective calendar`,
+  title: { default: `${APP_NAME} — reflective calendar`, template: `%s · ${APP_NAME}` },
   description: APP_TAGLINE,
 }
 

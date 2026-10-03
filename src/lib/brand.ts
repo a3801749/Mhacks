@@ -1,5 +1,5 @@
 // Working name until the team picks one. Rename here and it updates everywhere.
-export const APP_NAME = "Ebb"
+export const APP_NAME = "Andy"
 export const APP_TAGLINE = "A calendar that looks back before it plans ahead."
 
 export const AGENT_NAME = "Tilly"
@@ -23,4 +23,12 @@ export const GUIDANCE_MODES = {
     description:
       "Tilly reshuffles your schedule automatically based on how you've actually been working. You can always undo.",
   },
+} as const
+
+export const ASSIGNMENT_TYPES = {
+  project: "Project",
+  homework: "Homework",
+  reading: "Reading",
+  studying: "Studying",
+  writing: "Writing",
 } as const

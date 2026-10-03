@@ -3,20 +3,20 @@ import path from "node:path"
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
 import { buildSeed } from "../seed"
 import { applyChanges } from "../schedule"
-import type { CalendarEvent, Project, Settings, Task, TimeLog, WeekData } from "../types"
-import type { EventPatch, Store } from "./types"
+import type { CalendarEvent, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
+import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 
 const USER_ID = "u-demo"
 
 type Sql = NeonQueryFunction<false, false>
 
-const globalForNeon = globalThis as unknown as { __ebbNeon?: { sql: Sql; ready?: Promise<void> } }
+const globalForNeon = globalThis as unknown as { __calendarNeon?: { sql: Sql; ready?: Promise<void> } }
 
 function client() {
-  if (!globalForNeon.__ebbNeon) {
-    globalForNeon.__ebbNeon = { sql: neon(process.env.DATABASE_URL!) }
+  if (!globalForNeon.__calendarNeon) {
+    globalForNeon.__calendarNeon = { sql: neon(process.env.DATABASE_URL!) }
   }
-  return globalForNeon.__ebbNeon
+  return globalForNeon.__calendarNeon
 }
 
 async function ensureReady(today: string) {
@@ -42,11 +42,15 @@ async function ensureReady(today: string) {
 async function seed(sql: Sql, today: string) {
   const s = buildSeed(today)
   await sql.transaction([
-    sql`INSERT INTO users (id, name, guidance_mode) VALUES (${USER_ID}, 'Demo student', ${s.settings.guidanceMode})`,
+    sql`INSERT INTO users (id, name, guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled)
+        VALUES (${USER_ID}, 'Demo student', ${s.settings.guidanceMode}, ${s.settings.checkInEnabled},
+                ${s.settings.aiPlannerEnabled}, ${s.settings.screenTimeEnabled})`,
     ...s.projects.map(
       (p) =>
-        sql`INSERT INTO projects (id, user_id, name, color, target_minutes, due_date)
-            VALUES (${p.id}, ${USER_ID}, ${p.name}, ${p.color}, ${p.targetMinutes}, ${p.dueDate})`,
+        sql`INSERT INTO projects (id, user_id, name, color, course, type, target_minutes, assigned_date, due_date,
+                                  progress_percent, completed_date)
+            VALUES (${p.id}, ${USER_ID}, ${p.name}, ${p.color}, ${p.course}, ${p.type}, ${p.targetMinutes},
+                    ${p.assignedDate}, ${p.dueDate}, ${p.progressPercent}, ${p.completedDate})`,
     ),
     ...s.tasks.map(
       (t) =>
@@ -58,6 +62,9 @@ async function seed(sql: Sql, today: string) {
       (l) =>
         sql`INSERT INTO time_logs (id, task_id, event_id, minutes, note, created_at)
             VALUES (${l.id}, ${l.taskId}, ${l.eventId}, ${l.minutes}, ${l.note}, ${l.createdAt})`,
+    ),
+    ...s.checkIns.map(
+      (c) => sql`INSERT INTO check_ins (user_id, date, rating, note) VALUES (${USER_ID}, ${c.date}, ${c.rating}, ${c.note})`,
     ),
   ])
 }
@@ -76,9 +83,11 @@ function insertEvent(sql: Sql, e: CalendarEvent) {
 
 async function load(): Promise<WeekData> {
   const { sql } = client()
-  const [users, projects, tasks, events, logs] = await Promise.all([
-    sql`SELECT guidance_mode FROM users WHERE id = ${USER_ID}`,
-    sql`SELECT id, name, color, target_minutes, to_char(due_date, 'YYYY-MM-DD') AS due_date
+  const [users, projects, tasks, events, logs, checkIns] = await Promise.all([
+    sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
+    sql`SELECT id, name, color, course, type, target_minutes, progress_percent,
+               to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
+               to_char(completed_date, 'YYYY-MM-DD') AS completed_date
         FROM projects WHERE user_id = ${USER_ID} ORDER BY id`,
     sql`SELECT t.id, t.project_id, t.title, t.estimate_minutes, t.done
         FROM tasks t JOIN projects p ON p.id = t.project_id WHERE p.user_id = ${USER_ID} ORDER BY t.id`,
@@ -88,17 +97,30 @@ async function load(): Promise<WeekData> {
     sql`SELECT l.id, l.task_id, l.event_id, l.minutes, l.note, l.created_at
         FROM time_logs l JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
         WHERE p.user_id = ${USER_ID} ORDER BY l.created_at`,
+    sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, rating, note FROM check_ins WHERE user_id = ${USER_ID} ORDER BY date`,
   ])
+  const u = users[0]
   return {
     source: "neon",
-    settings: { guidanceMode: (users[0]?.guidance_mode ?? "coach") as Settings["guidanceMode"] },
+    settings: {
+      guidanceMode: (u?.guidance_mode ?? "coach") as Settings["guidanceMode"],
+      checkInEnabled: u?.check_in_enabled ?? true,
+      aiPlannerEnabled: u?.ai_planner_enabled ?? true,
+      screenTimeEnabled: u?.screen_time_enabled ?? false,
+    },
+    checkIns: checkIns.map((r): CheckIn => ({ date: r.date, rating: r.rating, note: r.note })),
     projects: projects.map(
       (r): Project => ({
         id: r.id,
         name: r.name,
         color: r.color,
+        course: r.course,
+        type: r.type,
         targetMinutes: r.target_minutes,
+        assignedDate: r.assigned_date,
         dueDate: r.due_date,
+        progressPercent: r.progress_percent,
+        completedDate: r.completed_date,
       }),
     ),
     tasks: tasks.map(
@@ -191,7 +213,49 @@ export const neonStore: Store = {
 
   async updateSettings(settings) {
     const { sql } = client()
-    await sql`UPDATE users SET guidance_mode = ${settings.guidanceMode} WHERE id = ${USER_ID}`
+    await sql`UPDATE users SET guidance_mode = ${settings.guidanceMode}, check_in_enabled = ${settings.checkInEnabled},
+                 ai_planner_enabled = ${settings.aiPlannerEnabled}, screen_time_enabled = ${settings.screenTimeEnabled}
+              WHERE id = ${USER_ID}`
+    return load()
+  },
+
+  async updateProject(projectId, patch) {
+    const { sql } = client()
+    const has = (k: keyof typeof patch) => Object.prototype.hasOwnProperty.call(patch, k)
+    const rows = await sql`
+      UPDATE projects SET
+        name = COALESCE(${patch.name ?? null}, name),
+        course = COALESCE(${patch.course ?? null}, course),
+        type = COALESCE(${patch.type ?? null}, type),
+        target_minutes = COALESCE(${patch.targetMinutes ?? null}::int, target_minutes),
+        assigned_date = COALESCE(${patch.assignedDate ?? null}::date, assigned_date),
+        due_date = COALESCE(${patch.dueDate ?? null}::date, due_date),
+        progress_percent = CASE WHEN ${has("progressPercent")} THEN ${patch.progressPercent ?? null}::int ELSE progress_percent END,
+        completed_date = CASE WHEN ${has("completedDate")} THEN ${patch.completedDate ?? null}::date ELSE completed_date END
+      WHERE id = ${projectId} AND user_id = ${USER_ID}
+      RETURNING id`
+    if (rows.length === 0) throw new Error("Assignment not found")
+    return load()
+  },
+
+  async createProject(input) {
+    const { sql } = client()
+    const [{ count }] = await sql`SELECT count(*)::int AS count FROM projects WHERE user_id = ${USER_ID}`
+    const id = `p-${Date.now().toString(36)}`
+    await sql.transaction([
+      sql`INSERT INTO projects (id, user_id, name, color, course, type, target_minutes, assigned_date, due_date)
+          VALUES (${id}, ${USER_ID}, ${input.name}, ${PROJECT_COLORS[count % PROJECT_COLORS.length]}, ${input.course},
+                  ${input.type}, ${input.targetMinutes}, ${input.assignedDate}, ${input.dueDate})`,
+      sql`INSERT INTO tasks (id, project_id, title, estimate_minutes)
+          VALUES (${`t-${Date.now().toString(36)}`}, ${id}, ${input.firstTask}, ${input.targetMinutes})`,
+    ])
+    return load()
+  },
+
+  async saveCheckIn(date, rating, note) {
+    const { sql } = client()
+    await sql`INSERT INTO check_ins (user_id, date, rating, note) VALUES (${USER_ID}, ${date}, ${rating}, ${note})
+              ON CONFLICT (user_id, date) DO UPDATE SET rating = EXCLUDED.rating, note = EXCLUDED.note`
     return load()
   },
 

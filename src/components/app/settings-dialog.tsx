@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import { Anchor, Compass, Loader2, RotateCcw, Waves } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { AGENT_NAME, GUIDANCE_MODES } from "@/lib/brand"
-import type { GuidanceMode, Integrations, WeekData } from "@/lib/types"
+import type { GuidanceMode, Integrations, Settings, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import type { WeekApi } from "@/hooks/use-week"
 
@@ -50,7 +51,7 @@ export function SettingsDialog({
                 onClick={async () => {
                   if (selected) return
                   setSaving(mode)
-                  await api.setMode(mode)
+                  await api.updateSettings({ guidanceMode: mode })
                   setSaving(null)
                 }}
                 className={cn(
@@ -76,6 +77,34 @@ export function SettingsDialog({
               </button>
             )
           })}
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-medium">Optional features</h3>
+            <p className="text-xs text-muted-foreground">Turn on only what feels useful. Nothing here is required.</p>
+          </div>
+          <FeatureToggle
+            label="Daily check-in"
+            description="Rate each day 1–10 in one tap, so patterns like “late nights → rough mornings” show up."
+            checked={data.settings.checkInEnabled}
+            onChange={(v) => api.updateSettings({ checkInEnabled: v })}
+          />
+          <FeatureToggle
+            label="AI planner suggestions"
+            description={`When you drag out a block on the Plan page, ${AGENT_NAME} suggests how to split it across your tasks.`}
+            checked={data.settings.aiPlannerEnabled}
+            onChange={(v) => api.updateSettings({ aiPlannerEnabled: v })}
+          />
+          <FeatureToggle
+            label="Screen time insights"
+            description="See how much of a study block went to scrolling. Needs the browser extension — coming soon."
+            checked={false}
+            disabled
+            onChange={() => {}}
+          />
         </div>
 
         <Separator />
@@ -122,5 +151,29 @@ function ServiceRow({ label, on, detail, fallback }: { label: string; on?: boole
         {on ? "Live" : `Using ${fallback}`}
       </span>
     </li>
+  )
+}
+
+function FeatureToggle({
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  description: string
+  checked: Settings["checkInEnabled"]
+  disabled?: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label className={cn("flex items-start justify-between gap-4", disabled && "opacity-60")}>
+      <span>
+        <span className="block text-sm">{label}</span>
+        <span className="block text-xs text-muted-foreground">{description}</span>
+      </span>
+      <Switch checked={checked} disabled={disabled} onCheckedChange={(v) => onChange(Boolean(v))} className="mt-1" />
+    </label>
   )
 }

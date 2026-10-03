@@ -4,12 +4,21 @@ export type EventStatus = "planned" | "completed" | "partial" | "skipped"
 
 export type EventKind = "work" | "life"
 
+export type AssignmentType = "project" | "homework" | "reading" | "studying" | "writing"
+
 export interface Project {
   id: string
   name: string
   color: string
+  course: string
+  type: AssignmentType
   targetMinutes: number
+  assignedDate: string
   dueDate: string
+  /** Self-reported completion, 0–100. Null until the user first reports it. */
+  progressPercent: number | null
+  /** Set once an assignment is finished; finished ones feed the estimate model. */
+  completedDate: string | null
 }
 
 export interface Task {
@@ -48,6 +57,16 @@ export interface TimeLog {
 
 export interface Settings {
   guidanceMode: GuidanceMode
+  checkInEnabled: boolean
+  aiPlannerEnabled: boolean
+  screenTimeEnabled: boolean
+}
+
+export interface CheckIn {
+  date: string
+  /** 1–10, how the day felt overall. */
+  rating: number
+  note: string
 }
 
 export interface WeekData {
@@ -55,6 +74,7 @@ export interface WeekData {
   tasks: Task[]
   events: CalendarEvent[]
   logs: TimeLog[]
+  checkIns: CheckIn[]
   settings: Settings
   source: "neon" | "memory"
 }
@@ -106,4 +126,17 @@ export interface Integrations {
   gemini: boolean
   elevenlabs: boolean
   neon: boolean
+}
+
+export interface PlanSegment {
+  taskId: string
+  startMin: number
+  endMin: number
+  why: string
+}
+
+export interface PlanBreakdown {
+  summary: string
+  segments: PlanSegment[]
+  source: "gemini" | "mock"
 }

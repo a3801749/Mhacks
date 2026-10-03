@@ -6,10 +6,6 @@ import type { CalendarEvent, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { BlockCard } from "./block-card"
 
-export function windowDates(data: WeekData) {
-  return [...new Set(data.events.map((e) => e.date))].sort()
-}
-
 export function DayStrip({
   data,
   dates,

@@ -70,7 +70,7 @@ export function BlockCard({
           {isNow && event.status === "planned" ? (
             <span className="relative inline-flex items-center gap-1.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
               <span className="relative flex size-1.5">
-                <span className="absolute inset-0 rounded-full bg-white motion-safe:animate-[ebb-breathe_2s_ease-in-out_infinite]" />
+                <span className="absolute inset-0 rounded-full bg-white motion-safe:animate-[breathe_2s_ease-in-out_infinite]" />
                 <span className="relative size-1.5 rounded-full bg-white" />
               </span>
               Now

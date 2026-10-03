@@ -5,10 +5,11 @@ import { CheckCircle2, Loader2, MessageCircleHeart, Moon, RotateCcw, Timer } fro
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { taskLogged } from "@/lib/analytics"
+import { estimateProject, taskLogged } from "@/lib/analytics"
+import { Slider } from "@/components/ui/slider"
 import { AGENT_NAME } from "@/lib/brand"
 import { formatDuration, formatRange, monthDay, weekdayShort } from "@/lib/time"
-import type { CalendarEvent, WeekData } from "@/lib/types"
+import type { CalendarEvent, Project, WeekData } from "@/lib/types"
 import type { WeekApi } from "@/hooks/use-week"
 import { PlannedVsActual } from "./block-card"
 
@@ -139,6 +140,10 @@ export function BlockDialog({
             </section>
           )}
 
+          {project && !project.completedDate && live.kind === "work" && (
+            <ProgressReport key={project.id} project={project} data={data} api={api} />
+          )}
+
           {logs.length > 0 && (
             <section>
               <h3 className="mb-2 text-sm font-medium">Progress trail</h3>
@@ -237,5 +242,46 @@ function ProgressRing({ percent, color }: { percent: number; color: string }) {
         {percent}%
       </text>
     </svg>
+  )
+}
+
+function ProgressReport({ project, data, api }: { project: Project; data: WeekData; api: WeekApi }) {
+  const [value, setValue] = useState(project.progressPercent ?? 0)
+  const [saving, setSaving] = useState(false)
+  const dirty = value !== (project.progressPercent ?? 0)
+  const estimate = estimateProject({ ...project, progressPercent: value || null }, data)
+
+  return (
+    <section className="space-y-3 rounded-2xl border bg-background p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium">How far along is {project.name}?</h3>
+        <span className="font-heading text-lg tabular-nums">{value}%</span>
+      </div>
+      <Slider
+        value={[value]}
+        min={0}
+        max={100}
+        step={5}
+        onValueChange={(v) => setValue(Array.isArray(v) ? v[0] : v)}
+        aria-label="Assignment progress"
+      />
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">~{formatDuration(estimate.remaining)} to go.</span> {estimate.explanation}
+      </p>
+      {dirty && (
+        <Button
+          size="sm"
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true)
+            await api.updateProject(project.id, { progressPercent: value }, "Progress saved — estimate updated")
+            setSaving(false)
+          }}
+        >
+          {saving && <Loader2 className="animate-spin" />}
+          Save progress
+        </Button>
+      )}
+    </section>
   )
 }

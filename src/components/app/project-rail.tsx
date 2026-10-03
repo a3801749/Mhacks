@@ -1,27 +1,45 @@
 "use client"
 
-import { CalendarClock } from "lucide-react"
+import { CalendarClock, Plus, Settings2, TrendingUp } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { ASSIGNMENT_TYPES } from "@/lib/brand"
 import { projectHealth, type Pace } from "@/lib/analytics"
 import { formatDuration } from "@/lib/time"
-import type { WeekData } from "@/lib/types"
+import type { Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const PACE_COPY: Record<Pace, { label: string; className: string }> = {
-  done: { label: "Target reached", className: "bg-emerald-100 text-emerald-800" },
+  done: { label: "Wrapped up", className: "bg-emerald-100 text-emerald-800" },
   ahead: { label: "Fully scheduled", className: "bg-teal-100 text-teal-800" },
   "on-track": { label: "Steady", className: "bg-sky-100 text-sky-800" },
   behind: { label: "Needs a little room", className: "bg-amber-100 text-amber-800" },
 }
 
-export function ProjectRail({ data, today, className }: { data: WeekData; today: string; className?: string }) {
+export function ProjectRail({
+  data,
+  today,
+  className,
+  onEdit,
+}: {
+  data: WeekData
+  today: string
+  className?: string
+  onEdit?: (p: Project | "new") => void
+}) {
   const health = projectHealth(data, today)
   return (
     <section className={cn("space-y-3", className)} aria-labelledby="projects-heading">
       <div className="flex items-baseline justify-between">
         <h2 id="projects-heading" className="font-heading text-lg font-medium">
-          Active projects
+          Assignments
         </h2>
-        <span className="text-xs text-muted-foreground">{health.length} in motion</span>
+        {onEdit ? (
+          <Button variant="ghost" size="sm" onClick={() => onEdit("new")}>
+            <Plus /> New
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">{health.length} in motion</span>
+        )}
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
         {health.map((h) => {
@@ -29,7 +47,7 @@ export function ProjectRail({ data, today, className }: { data: WeekData; today:
           return (
             <article
               key={h.project.id}
-              className="min-w-[240px] rounded-2xl border bg-card p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] lg:min-w-0"
+              className="group min-w-[250px] rounded-2xl border bg-card p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] lg:min-w-0"
             >
               <div className="flex items-start gap-3">
                 <span
@@ -39,23 +57,47 @@ export function ProjectRail({ data, today, className }: { data: WeekData; today:
                 />
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-medium">{h.project.name}</h3>
+                  <p className="mt-1 flex flex-wrap gap-1">
+                    <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                      {h.project.course}
+                    </span>
+                    <span className="rounded-md border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {ASSIGNMENT_TYPES[h.project.type]}
+                    </span>
+                  </p>
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                     <CalendarClock className="size-3" />
                     {h.daysLeft === 0 ? "Due today" : `Due in ${h.daysLeft} day${h.daysLeft === 1 ? "" : "s"}`}
                   </p>
                 </div>
-                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", pace.className)}>
-                  {pace.label}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", pace.className)}>
+                    {pace.label}
+                  </span>
+                  {onEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Edit ${h.project.name}`}
+                      onClick={() => onEdit(h.project)}
+                      className="text-muted-foreground"
+                    >
+                      <Settings2 />
+                    </Button>
+                  )}
+                </div>
               </div>
-              <WaveBar percent={h.percent} color={h.project.color} className="mt-4" />
+              <div className="mt-3 flex items-center gap-2">
+                <WaveBar percent={h.percent} color={h.project.color} className="flex-1" />
+                <span className="w-9 text-right text-xs tabular-nums">{h.percent}%</span>
+              </div>
               <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <dt className="text-muted-foreground">Done</dt>
                   <dd className="font-medium tabular-nums">{formatDuration(h.logged)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">To go</dt>
+                  <dt className="text-muted-foreground">Est. to go</dt>
                   <dd className="font-medium tabular-nums">{formatDuration(h.remaining)}</dd>
                 </div>
                 <div>
@@ -63,6 +105,10 @@ export function ProjectRail({ data, today, className }: { data: WeekData; today:
                   <dd className="font-medium tabular-nums">{formatDuration(h.scheduledAhead)}</dd>
                 </div>
               </dl>
+              <p className="mt-2.5 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                <TrendingUp className="mt-px size-3 shrink-0" />
+                {h.estimate.explanation}
+              </p>
             </article>
           )
         })}
@@ -85,7 +131,7 @@ export function WaveBar({ percent, color, className }: { percent: number; color:
         style={{ width: `${Math.max(percent, 3)}%`, backgroundColor: color }}
       >
         <svg
-          className="absolute inset-y-0 left-0 h-full w-[200%] opacity-35 motion-safe:animate-[ebb-wave_6s_ease-in-out_infinite]"
+          className="absolute inset-y-0 left-0 h-full w-[200%] opacity-35 motion-safe:animate-[wave_6s_ease-in-out_infinite]"
           viewBox="0 0 200 10"
           preserveAspectRatio="none"
           aria-hidden

@@ -117,3 +117,43 @@ export const REFLECT_RESPONSE_SCHEMA = {
   },
   required: ["headline", "summary", "habits", "suggestions", "questions"],
 }
+
+export const PLAN_SYSTEM_PROMPT = `You are the planning assistant inside ${APP_NAME}, a reflective calendar for students.
+The user dragged out a block of time and wants help deciding how to use it.
+
+You receive JSON with:
+- block: { date, startMin, endMin } — minutes since midnight.
+- busy: existing blocks inside that window. Never overlap them.
+- candidates: open tasks with project, course, type, dueDate, daysLeft, remainingMinutes (already adjusted for how long this kind of work historically takes the user).
+- recentMood: the last few optional 1–10 daily check-ins (may be empty).
+- rhythm: when in the day the user historically focuses best.
+
+Produce "segments": an ordered breakdown of the block.
+- Each segment: taskId (from candidates), startMin, endMin, and a short "why" (max 14 words).
+- Segments 25–90 minutes. Leave a 10–15 minute break between segments longer than 45 minutes.
+- Prioritise near deadlines and large remaining work, but mix in a lighter task (reading/homework) when the block is long or recentMood is low (<= 5).
+- Put the hardest work first unless the block starts late at night.
+- Stay inside the block and outside busy times.
+- "summary": one warm sentence explaining the plan. No markdown, no emoji.
+Return ONLY JSON matching the response schema.`
+
+export const PLAN_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    segments: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          taskId: { type: "string" },
+          startMin: { type: "integer" },
+          endMin: { type: "integer" },
+          why: { type: "string" },
+        },
+        required: ["taskId", "startMin", "endMin", "why"],
+      },
+    },
+  },
+  required: ["summary", "segments"],
+}

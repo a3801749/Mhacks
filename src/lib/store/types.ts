@@ -1,4 +1,4 @@
-import type { CalendarEvent, ScheduleChange, Settings, WeekData } from "../types"
+import type { AssignmentType, CalendarEvent, ScheduleChange, Settings, WeekData } from "../types"
 
 export interface EventPatch {
   status?: CalendarEvent["status"]
@@ -7,12 +7,38 @@ export interface EventPatch {
   endMin?: number
 }
 
+export interface ProjectPatch {
+  name?: string
+  course?: string
+  type?: AssignmentType
+  targetMinutes?: number
+  assignedDate?: string
+  dueDate?: string
+  progressPercent?: number | null
+  completedDate?: string | null
+}
+
+export interface NewProject {
+  name: string
+  course: string
+  type: AssignmentType
+  targetMinutes: number
+  assignedDate: string
+  dueDate: string
+  firstTask: string
+}
+
 export interface Store {
   getWeek(today: string): Promise<WeekData>
   logTime(eventId: string, minutes: number, note: string): Promise<WeekData>
   updateEvent(eventId: string, patch: EventPatch): Promise<WeekData>
   setTaskDone(taskId: string, done: boolean): Promise<WeekData>
+  updateProject(projectId: string, patch: ProjectPatch): Promise<WeekData>
+  createProject(project: NewProject): Promise<WeekData>
+  saveCheckIn(date: string, rating: number, note: string): Promise<WeekData>
   applyChanges(changes: ScheduleChange[]): Promise<WeekData>
   updateSettings(settings: Settings): Promise<WeekData>
   reset(today: string): Promise<WeekData>
 }
+
+export const PROJECT_COLORS = ["#6F9E80", "#7C83D6", "#D99A4E", "#D9776A", "#5FA3B8", "#B07CC6", "#C9A227", "#4F9D9A"]

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { nowMinutes, toDateKey } from "@/lib/time"
-import type { CalendarEvent, GuidanceMode, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+import type { NewProject, ProjectPatch } from "@/lib/store/types"
+import type { CalendarEvent, Integrations, ScheduleChange, Settings, WeekData } from "@/lib/types"
 
 export type LoadedWeek = WeekData & { integrations?: Integrations }
 
@@ -87,8 +88,14 @@ export function useWeek(today: string | null) {
       ),
     applyChanges: (changes: ScheduleChange[], msg = "Schedule updated") =>
       mutate(() => request(`/api/schedule/apply`, { method: "POST", body: json({ changes }) }), msg),
-    setMode: (guidanceMode: GuidanceMode) =>
-      mutate(() => request(`/api/settings`, { method: "PUT", body: json({ guidanceMode }) })),
+    updateSettings: (patch: Partial<Settings>) =>
+      mutate(() => request(`/api/settings`, { method: "PUT", body: json(patch) })),
+    updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
+      mutate(() => request(`/api/projects/${projectId}`, { method: "PATCH", body: json(patch) }), msg),
+    createProject: (project: NewProject) =>
+      mutate(() => request(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
+    saveCheckIn: (date: string, rating: number, note: string) =>
+      mutate(() => request(`/api/checkins`, { method: "PUT", body: json({ date, rating, note }) }), "Thanks — noted."),
     reset: () =>
       mutate(() => request(`/api/reset`, { method: "POST", body: json({ today }) }), "Demo data restored"),
   }

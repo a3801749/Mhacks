@@ -1,21 +1,31 @@
--- Ebb schema for Neon Postgres. The app runs this automatically on first request
+-- Schema for Neon Postgres. The app runs this automatically on first request
 -- when DATABASE_URL is set; it is kept here for reference and manual setup.
 
 CREATE TABLE IF NOT EXISTS users (
-  id            TEXT PRIMARY KEY,
-  name          TEXT NOT NULL,
-  guidance_mode TEXT NOT NULL DEFAULT 'coach'
-                CHECK (guidance_mode IN ('anchor', 'coach', 'autopilot')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  guidance_mode       TEXT NOT NULL DEFAULT 'coach'
+                      CHECK (guidance_mode IN ('anchor', 'coach', 'autopilot')),
+  check_in_enabled    BOOLEAN NOT NULL DEFAULT true,
+  ai_planner_enabled  BOOLEAN NOT NULL DEFAULT true,
+  screen_time_enabled BOOLEAN NOT NULL DEFAULT false,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- "Projects" are assignments, tagged by course and type so estimates can learn per category.
 CREATE TABLE IF NOT EXISTS projects (
-  id             TEXT PRIMARY KEY,
-  user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  color          TEXT NOT NULL,
-  target_minutes INTEGER NOT NULL,
-  due_date       DATE NOT NULL
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  color            TEXT NOT NULL,
+  course           TEXT NOT NULL DEFAULT 'General',
+  type             TEXT NOT NULL DEFAULT 'project'
+                   CHECK (type IN ('project', 'homework', 'reading', 'studying', 'writing')),
+  target_minutes   INTEGER NOT NULL,
+  assigned_date    DATE NOT NULL DEFAULT CURRENT_DATE,
+  due_date         DATE NOT NULL,
+  progress_percent INTEGER CHECK (progress_percent BETWEEN 0 AND 100),
+  completed_date   DATE
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -55,3 +65,22 @@ CREATE TABLE IF NOT EXISTS time_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS time_logs_task_idx ON time_logs (task_id, created_at);
+
+-- Optional once-a-day "how did today feel" rating.
+CREATE TABLE IF NOT EXISTS check_ins (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date    DATE NOT NULL,
+  rating  INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 10),
+  note    TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (user_id, date)
+);
+
+-- Upgrades for databases created before these columns existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS check_in_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_planner_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS screen_time_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS course TEXT NOT NULL DEFAULT 'General';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'project';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS assigned_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS progress_percent INTEGER;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS completed_date DATE;

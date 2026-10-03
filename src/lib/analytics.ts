@@ -1,8 +1,22 @@
-import { daysBetween } from "./time"
+import { ASSIGNMENT_TYPES } from "./brand"
+import { addDays, daysBetween, formatClock, formatDuration } from "./time"
 import type { CalendarEvent, Project, Task, TimeLog, WeekData } from "./types"
+
+export const WINDOW_BACK = 4
+export const WINDOW_AHEAD = 2
+
+export function windowDates(today: string) {
+  const dates: string[] = []
+  for (let i = -WINDOW_BACK; i <= WINDOW_AHEAD; i++) dates.push(addDays(today, i))
+  return dates
+}
 
 export function isPast(e: CalendarEvent, today: string) {
   return e.date < today || e.status !== "planned"
+}
+
+export function activeProjects(data: WeekData) {
+  return data.projects.filter((p) => !p.completedDate)
 }
 
 export function taskLogged(taskId: string, logs: TimeLog[]) {
@@ -14,10 +28,102 @@ export function projectLogged(projectId: string, tasks: Task[], logs: TimeLog[])
   return logs.filter((l) => ids.has(l.taskId)).reduce((sum, l) => sum + l.minutes, 0)
 }
 
+export function projectStartedDate(projectId: string, data: WeekData): string | null {
+  const dates = data.events
+    .filter((e) => e.projectId === projectId && e.actualMinutes > 0)
+    .map((e) => e.date)
+    .sort()
+  return dates[0] ?? null
+}
+
 export function projectScheduledAhead(projectId: string, events: CalendarEvent[], today: string) {
   return events
     .filter((e) => e.projectId === projectId && e.status === "planned" && e.date >= today)
     .reduce((sum, e) => sum + (e.endMin - e.startMin), 0)
+}
+
+/* ------------------------------------------------------------------ */
+/* Estimate model: learns how long each course/type actually takes.    */
+/* ------------------------------------------------------------------ */
+
+export interface CategoryStat {
+  key: string
+  course: string | null
+  type: Project["type"] | null
+  planned: number
+  actual: number
+  multiplier: number
+  samples: number
+}
+
+export function categoryStats(data: WeekData): CategoryStat[] {
+  const done = data.projects.filter((p) => p.completedDate)
+  const groups = new Map<string, CategoryStat>()
+  const add = (key: string, course: string | null, type: Project["type"] | null, p: Project) => {
+    const g = groups.get(key) ?? { key, course, type, planned: 0, actual: 0, multiplier: 1, samples: 0 }
+    g.planned += p.targetMinutes
+    g.actual += projectLogged(p.id, data.tasks, data.logs)
+    g.samples += 1
+    g.multiplier = g.actual / g.planned
+    groups.set(key, g)
+  }
+  for (const p of done) {
+    add(`${p.course}|${p.type}`, p.course, p.type, p)
+    add(`*|${p.type}`, null, p.type, p)
+  }
+  return [...groups.values()]
+}
+
+export function categoryLabel(c: Pick<CategoryStat, "course" | "type">) {
+  const type = c.type ? ASSIGNMENT_TYPES[c.type].toLowerCase() : "work"
+  return c.course ? `${c.course} ${type}s` : `${type}s`
+}
+
+export interface Estimate {
+  remaining: number
+  total: number
+  basis: "pace" | "category" | "target"
+  explanation: string
+}
+
+export function estimateProject(project: Project, data: WeekData, stats = categoryStats(data)): Estimate {
+  const logged = projectLogged(project.id, data.tasks, data.logs)
+  const p = project.progressPercent
+  const category =
+    stats.find((s) => s.key === `${project.course}|${project.type}`) ?? stats.find((s) => s.key === `*|${project.type}`)
+
+  if (p != null && p > 0 && logged > 0) {
+    const pace = (logged * (100 - p)) / p
+    // Early progress reports are noisy, so lean on history until you're further along.
+    const weight = Math.min(1, p / 50)
+    const categoryRemaining = category ? Math.max(0, project.targetMinutes * category.multiplier - logged) : pace
+    const remaining = Math.round((weight * pace + (1 - weight) * categoryRemaining) / 5) * 5
+    return {
+      remaining,
+      total: logged + remaining,
+      basis: "pace",
+      explanation: `${p}% done after ${formatDuration(logged)} — at that pace about ${formatDuration(remaining)} to go.`,
+    }
+  }
+  if (category && category.samples > 0) {
+    const total = Math.round((project.targetMinutes * category.multiplier) / 5) * 5
+    const pct = Math.round((category.multiplier - 1) * 100)
+    return {
+      remaining: Math.max(0, total - logged),
+      total,
+      basis: "category",
+      explanation:
+        Math.abs(pct) < 8
+          ? `Your ${categoryLabel(category)} usually land right on estimate.`
+          : `Your ${categoryLabel(category)} usually take ${Math.abs(pct)}% ${pct > 0 ? "longer" : "less"} than planned.`,
+    }
+  }
+  return {
+    remaining: Math.max(0, project.targetMinutes - logged),
+    total: project.targetMinutes,
+    basis: "target",
+    explanation: "Based on your original estimate. Report progress after a block to sharpen it.",
+  }
 }
 
 export type Pace = "ahead" | "on-track" | "behind" | "done"
@@ -26,6 +132,7 @@ export interface ProjectHealth {
   project: Project
   logged: number
   remaining: number
+  estimate: Estimate
   scheduledAhead: number
   daysLeft: number
   percent: number
@@ -33,25 +140,32 @@ export interface ProjectHealth {
 }
 
 export function projectHealth(data: WeekData, today: string): ProjectHealth[] {
-  return data.projects.map((project) => {
+  const stats = categoryStats(data)
+  return activeProjects(data).map((project) => {
     const logged = projectLogged(project.id, data.tasks, data.logs)
-    const remaining = Math.max(0, project.targetMinutes - logged)
+    const estimate = estimateProject(project, data, stats)
+    const remaining = estimate.remaining
     const scheduledAhead = projectScheduledAhead(project.id, data.events, today)
     const daysLeft = Math.max(0, daysBetween(today, project.dueDate))
-    const percent = Math.min(100, Math.round((logged / project.targetMinutes) * 100))
+    const percent =
+      project.progressPercent ?? Math.min(100, Math.round((logged / Math.max(1, estimate.total)) * 100))
     let pace: Pace = "on-track"
-    if (remaining === 0) pace = "done"
+    if (remaining === 0 || percent >= 100) pace = "done"
     else if (scheduledAhead >= remaining) pace = "ahead"
-    else if (daysLeft <= 3 && scheduledAhead < remaining * 0.6) pace = "behind"
-    return { project, logged, remaining, scheduledAhead, daysLeft, percent, pace }
+    else if (daysLeft <= 4 && scheduledAhead < remaining * 0.6) pace = "behind"
+    return { project, logged, remaining, estimate, scheduledAhead, daysLeft, percent, pace }
   })
 }
+
+/* ------------------------------------------------------------------ */
+/* Backtracking over the visible window.                               */
+/* ------------------------------------------------------------------ */
 
 type Bucket = "morning" | "afternoon" | "evening"
 
 function bucketOf(startMin: number): Bucket {
-  if (startMin < 12 * 60) return "morning"
-  if (startMin < 17 * 60) return "afternoon"
+  if (startMin >= 4 * 60 && startMin < 12 * 60) return "morning"
+  if (startMin >= 12 * 60 && startMin < 17 * 60) return "afternoon"
   return "evening"
 }
 
@@ -70,7 +184,8 @@ export interface BacktrackStats {
 }
 
 export function backtrack(data: WeekData, today: string): BacktrackStats {
-  const past = data.events.filter((e) => e.kind === "work" && isPast(e, today))
+  const from = addDays(today, -WINDOW_BACK)
+  const past = data.events.filter((e) => e.kind === "work" && e.date >= from && isPast(e, today))
   const len = (e: CalendarEvent) => e.endMin - e.startMin
   const byTimeOfDay: BacktrackStats["byTimeOfDay"] = {
     morning: { planned: 0, actual: 0, skipped: 0, blocks: 0 },
@@ -107,8 +222,10 @@ export function backtrack(data: WeekData, today: string): BacktrackStats {
   const plannedMinutes = past.reduce((s, e) => s + len(e), 0)
   const actualMinutes = past.reduce((s, e) => s + e.actualMinutes, 0)
   const dates = [...days.keys()].sort()
+  const active = new Set(activeProjects(data).map((p) => p.id))
 
   const estimateDrift = data.tasks
+    .filter((t) => active.has(t.projectId))
     .map((t) => {
       const logged = taskLogged(t.id, data.logs)
       return { taskId: t.id, title: t.title, estimate: t.estimateMinutes, logged, ratio: logged / t.estimateMinutes }
@@ -130,5 +247,189 @@ export function backtrack(data: WeekData, today: string): BacktrackStats {
       .map((p) => ({ projectId: p.id, name: p.name, color: p.color, ...projects.get(p.id)! })),
     estimateDrift,
     movedCount: data.events.filter((e) => e.movedFromDate != null).length,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Rhythm: when in the day you actually work, screen-time style.       */
+/* ------------------------------------------------------------------ */
+
+export type RhythmGroupBy = "project" | "course" | "type"
+
+export interface Session {
+  date: string
+  start: number
+  end: number
+  projectId: string | null
+  minutes: number
+}
+
+/** Actual worked time, positioned from the block's start. */
+export function sessions(data: WeekData, from: string, to: string): Session[] {
+  return data.events
+    .filter((e) => e.kind === "work" && e.actualMinutes > 0 && e.date >= from && e.date <= to)
+    .map((e) => ({
+      date: e.date,
+      start: e.startMin,
+      end: Math.min(1440, e.startMin + e.actualMinutes),
+      projectId: e.projectId,
+      minutes: e.actualMinutes,
+    }))
+}
+
+export function groupKey(projectId: string | null, data: WeekData, by: RhythmGroupBy) {
+  const p = data.projects.find((x) => x.id === projectId)
+  if (!p) return { key: "other", label: "Other", color: "#A8A29E" }
+  if (by === "project") return { key: p.id, label: p.name, color: p.color }
+  if (by === "course") {
+    const first = data.projects.find((x) => x.course === p.course)!
+    return { key: p.course, label: p.course, color: first.color }
+  }
+  const TYPE_COLORS: Record<Project["type"], string> = {
+    project: "#7C83D6",
+    homework: "#5FA3B8",
+    reading: "#D99A4E",
+    studying: "#B07CC6",
+    writing: "#6F9E80",
+  }
+  return { key: p.type, label: ASSIGNMENT_TYPES[p.type], color: TYPE_COLORS[p.type] }
+}
+
+export interface RhythmBin {
+  /** Start of the half-hour slot, minutes from midnight. */
+  slot: number
+  total: number
+  parts: { key: string; minutes: number }[]
+}
+
+export function rhythmBins(list: Session[], data: WeekData, by: RhythmGroupBy) {
+  const bins: RhythmBin[] = Array.from({ length: 48 }, (_, i) => ({ slot: i * 30, total: 0, parts: [] }))
+  const legend = new Map<string, { key: string; label: string; color: string; minutes: number }>()
+  for (const s of list) {
+    const g = groupKey(s.projectId, data, by)
+    const entry = legend.get(g.key) ?? { ...g, minutes: 0 }
+    entry.minutes += s.minutes
+    legend.set(g.key, entry)
+    for (let t = s.start; t < s.end; ) {
+      const slot = Math.floor(t / 30)
+      const slotEnd = (slot + 1) * 30
+      const mins = Math.min(s.end, slotEnd) - t
+      const bin = bins[slot]
+      bin.total += mins
+      const part = bin.parts.find((p) => p.key === g.key)
+      if (part) part.minutes += mins
+      else bin.parts.push({ key: g.key, minutes: mins })
+      t += mins
+    }
+  }
+  return { bins, legend: [...legend.values()].sort((a, b) => b.minutes - a.minutes) }
+}
+
+/** When work wraps up each day; sessions before 4am count toward the previous night. */
+export function windDownByDay(list: Session[]) {
+  const byNight = new Map<string, number>()
+  for (const s of list) {
+    const night = s.start < 240 ? addDays(s.date, -1) : s.date
+    const end = s.start < 240 ? s.end + 1440 : s.end
+    byNight.set(night, Math.max(byNight.get(night) ?? 0, end))
+  }
+  return [...byNight.entries()].map(([date, end]) => ({ date, end })).sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function formatWindDown(min: number) {
+  return formatClock(min % 1440)
+}
+
+export interface RhythmInsight {
+  title: string
+  detail: string
+  tone: "neutral" | "warning" | "positive"
+}
+
+export function rhythmInsights(data: WeekData, today: string, days: number): RhythmInsight[] {
+  const from = addDays(today, -days + 1)
+  const list = sessions(data, from, today)
+  const insights: RhythmInsight[] = []
+  if (list.length === 0) return insights
+
+  const late = list.filter((s) => s.start >= 22 * 60 || s.start < 240)
+  const lateMinutes = late.reduce((s, x) => s + x.minutes, 0)
+  const total = list.reduce((s, x) => s + x.minutes, 0)
+  if (lateMinutes > 0) {
+    const byProject = new Map<string, number>()
+    for (const s of late) byProject.set(s.projectId ?? "", (byProject.get(s.projectId ?? "") ?? 0) + s.minutes)
+    const [topId, topMin] = [...byProject.entries()].sort((a, b) => b[1] - a[1])[0]
+    const name = data.projects.find((p) => p.id === topId)?.course ?? "Misc"
+    insights.push({
+      title: `${name} owns your late nights`,
+      detail: `${formatDuration(lateMinutes)} of work happened after 10pm (${Math.round((lateMinutes / total) * 100)}% of the total) — ${Math.round((topMin / lateMinutes) * 100)}% of it on ${name}.`,
+      tone: lateMinutes / total > 0.2 ? "warning" : "neutral",
+    })
+  }
+
+  const wind = windDownByDay(list)
+  if (wind.length >= 6) {
+    const half = Math.floor(wind.length / 2)
+    const avg = (xs: { end: number }[]) => xs.reduce((s, x) => s + x.end, 0) / xs.length
+    const early = avg(wind.slice(0, half))
+    const recent = avg(wind.slice(half))
+    const delta = Math.round(recent - early)
+    if (Math.abs(delta) >= 30) {
+      insights.push({
+        title: delta > 0 ? "You're wrapping up later and later" : "You're wrapping up earlier",
+        detail: `Your last session used to end around ${formatWindDown(Math.round(early))}; lately it's closer to ${formatWindDown(Math.round(recent))}.`,
+        tone: delta > 0 ? "warning" : "positive",
+      })
+    }
+  }
+
+  const byHour = new Array(24).fill(0)
+  for (const s of list) for (let t = s.start; t < s.end; t += 15) byHour[Math.floor(t / 60) % 24] += Math.min(15, s.end - t)
+  const peak = byHour.indexOf(Math.max(...byHour))
+  insights.push({
+    title: `Peak focus: ${formatClock(peak * 60)}–${formatClock((peak + 1) * 60)}`,
+    detail: `That hour holds more of your work than any other across the last ${days} days.`,
+    tone: "positive",
+  })
+
+  const mood = moodCorrelation(data, from, today)
+  if (mood) insights.push(mood)
+
+  for (const c of categoryStats(data).filter((s) => s.course && s.samples > 0)) {
+    const pct = Math.round((c.multiplier - 1) * 100)
+    if (Math.abs(pct) >= 20) {
+      insights.push({
+        title: `${categoryLabel(c)} run ${pct > 0 ? "long" : "short"}`,
+        detail: `They've taken ${Math.abs(pct)}% ${pct > 0 ? "more" : "less"} time than planned, so new estimates are adjusted.`,
+        tone: "neutral",
+      })
+    }
+  }
+  return insights
+}
+
+/** Links the optional 1–10 daily check-in to how the day (and night before) went. */
+export function moodCorrelation(data: WeekData, from: string, to: string): RhythmInsight | null {
+  const checks = data.checkIns.filter((c) => c.date >= from && c.date <= to)
+  if (checks.length < 5) return null
+  const lateBefore = (date: string) =>
+    data.events.some(
+      (e) =>
+        e.kind === "work" &&
+        e.actualMinutes > 0 &&
+        ((e.date === addDays(date, -1) && e.startMin + e.actualMinutes >= 23 * 60) ||
+          (e.date === date && e.startMin < 240)),
+    )
+  const withLate = checks.filter((c) => lateBefore(c.date))
+  const without = checks.filter((c) => !lateBefore(c.date))
+  if (withLate.length < 2 || without.length < 2) return null
+  const avg = (xs: { rating: number }[]) => xs.reduce((s, x) => s + x.rating, 0) / xs.length
+  const a = avg(withLate)
+  const b = avg(without)
+  if (b - a < 0.8) return null
+  return {
+    title: "Late nights cost you the next day",
+    detail: `After working past 11pm you rate your day ${a.toFixed(1)}/10 on average, versus ${b.toFixed(1)} otherwise.`,
+    tone: "warning",
   }
 }

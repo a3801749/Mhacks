@@ -1,4 +1,4 @@
-import { backtrack, projectHealth, type BacktrackStats } from "../analytics"
+import { backtrack, projectHealth, rhythmInsights, type BacktrackStats } from "../analytics"
 import { findOpenSlot } from "../schedule"
 import { addDays, formatClock, formatDuration, weekdayLong } from "../time"
 import type { AdjustResponse, CalendarEvent, ChatTurn, Reflection, ScheduleChange, WeekData } from "../types"
@@ -167,6 +167,8 @@ export function mockReflect(data: WeekData, today: string): Reflection {
       detail: `${worst[1].skipped} of ${worst[1].blocks} ${worst[0]} blocks were skipped — that's a pattern, not a character flaw.`,
     })
   }
+  const rhythmWarning = rhythmInsights(data, today, 28).find((i) => i.tone === "warning")
+  if (rhythmWarning) habits.push({ title: rhythmWarning.title, detail: rhythmWarning.detail })
   const over = stats.estimateDrift.find((t) => t.logged > t.estimate * 0.6 && t.ratio > 0.6)
   const overrun = data.events.filter(
     (e) => e.kind === "work" && e.actualMinutes > e.endMin - e.startMin,

@@ -1,9 +1,17 @@
 import "server-only"
-import { backtrack, projectHealth, taskLogged } from "../analytics"
-import type { AdjustResponse, ChatTurn, Reflection, ScheduleChange, WeekData } from "../types"
+import { activeProjects, backtrack, categoryStats, categoryLabel, projectHealth, rhythmInsights, taskLogged } from "../analytics"
+import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { mockAdjust, mockReflect } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
-import { ADJUST_RESPONSE_SCHEMA, REFLECT_RESPONSE_SCHEMA, REFLECT_SYSTEM_PROMPT, adjustSystemPrompt } from "./prompts"
+import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
+import {
+  ADJUST_RESPONSE_SCHEMA,
+  PLAN_RESPONSE_SCHEMA,
+  PLAN_SYSTEM_PROMPT,
+  REFLECT_RESPONSE_SCHEMA,
+  REFLECT_SYSTEM_PROMPT,
+  adjustSystemPrompt,
+} from "./prompts"
 
 export interface Now {
   date: string
@@ -11,16 +19,21 @@ export interface Now {
 }
 
 function context(data: WeekData, today: string) {
+  const active = new Set(activeProjects(data).map((p) => p.id))
   return {
     projects: projectHealth(data, today).map((h) => ({
       id: h.project.id,
       name: h.project.name,
       dueDate: h.project.dueDate,
       daysLeft: h.daysLeft,
+      course: h.project.course,
+      type: h.project.type,
+      progressPercent: h.project.progressPercent,
       remainingMinutes: h.remaining,
+      estimateBasis: h.estimate.explanation,
       scheduledAheadMinutes: h.scheduledAhead,
     })),
-    tasks: data.tasks.map((t) => ({
+    tasks: data.tasks.filter((t) => active.has(t.projectId)).map((t) => ({
       id: t.id,
       projectId: t.projectId,
       title: t.title,
@@ -29,6 +42,9 @@ function context(data: WeekData, today: string) {
       done: t.done,
     })),
     stats: backtrack(data, today),
+    categoryHistory: categoryStats(data)
+      .filter((c) => c.course)
+      .map((c) => ({ category: categoryLabel(c), plannedVsActual: Number(c.multiplier.toFixed(2)), samples: c.samples })),
   }
 }
 
@@ -87,6 +103,9 @@ export async function reflect(data: WeekData, today: string): Promise<Reflection
           projects: ctx.projects,
           tasks: ctx.tasks,
           upcoming: data.events.filter((e) => e.status === "planned" && e.date >= today),
+          categoryHistory: ctx.categoryHistory,
+          monthRhythm: rhythmInsights(data, today, 28),
+          recentCheckIns: data.settings.checkInEnabled ? recentMood(data, today) : [],
         },
         REFLECT_RESPONSE_SCHEMA,
       )
@@ -104,4 +123,28 @@ export async function reflect(data: WeekData, today: string): Promise<Reflection
     }
   }
   return mockReflect(data, today)
+}
+
+export async function planBlock(data: WeekData, block: PlanBlock, today: string): Promise<PlanBreakdown> {
+  if (geminiEnabled()) {
+    try {
+      const { busy } = freeIntervals(data, block)
+      const out = await generateJson<{ summary: string; segments: PlanSegment[] }>(
+        PLAN_SYSTEM_PROMPT,
+        {
+          block,
+          busy: busy.map((b) => ({ title: b.title, startMin: b.startMin, endMin: b.endMin })),
+          candidates: planCandidates(data, today).slice(0, 8),
+          recentMood: data.settings.checkInEnabled ? recentMood(data, today) : [],
+          rhythm: rhythmInsights(data, today, 28),
+        },
+        PLAN_RESPONSE_SCHEMA,
+      )
+      const segments = sanitizeSegments(out.segments ?? [], data, block)
+      if (segments.length > 0) return { summary: out.summary, segments, source: "gemini" }
+    } catch (err) {
+      console.error("[gemini] plan failed, using fallback:", err)
+    }
+  }
+  return mockBreakdown(data, block, today)
 }

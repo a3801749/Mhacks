@@ -128,17 +128,17 @@
     @apply font-sans;
   }
 }
-@keyframes ebb-wave {
+@keyframes wave {
   0%, 100% { transform: translateX(0) scaleY(1); }
   50% { transform: translateX(-25%) scaleY(1.15); }
 }
 
-@keyframes ebb-breathe {
+@keyframes breathe {
   0%, 100% { transform: scale(1); opacity: 0.55; }
   50% { transform: scale(1.35); opacity: 0; }
 }
 
-.ebb-paper {
+.app-paper {
   background-image:
     radial-gradient(circle at 12% 0%, oklch(0.94 0.04 195 / 0.55), transparent 40%),
     radial-gradient(circle at 95% 10%, oklch(0.95 0.05 70 / 0.45), transparent 35%);
