@@ -111,9 +111,15 @@ export function mockAdjust(
   const preferTomorrow = /tomorrow|morning/.test(lower) || best?.[0] === "morning"
   const startDate = preferTomorrow ? addDays(now.date, 1) : now.date
   const earliest = { date: startDate, minute: startDate === now.date ? now.minute + 60 : 0 }
-  const slot =
-    findOpenSlot(data.events, windowDates(data, now.date), length, earliest, target.id) ??
-    findOpenSlot(data.events, windowDates(data, now.date), length, { date: now.date, minute: now.minute + 30 }, target.id)
+  const dates = windowDates(data, now.date)
+  const isSameSlot = (s: { date: string; startMin: number } | null) =>
+    s != null && s.date === target.date && s.startMin === target.startMin
+  let slot =
+    findOpenSlot(data.events, dates, length, earliest, target.id) ??
+    findOpenSlot(data.events, dates, length, { date: now.date, minute: now.minute + 30 }, target.id)
+  if (isSameSlot(slot)) {
+    slot = findOpenSlot(data.events, dates, length, { date: target.date, minute: target.endMin }, target.id)
+  }
 
   if (!slot) {
     return {

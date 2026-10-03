@@ -41,6 +41,7 @@ function sanitize(changes: ScheduleChange[], data: WeekData, now: Now): Schedule
     if (c.action === "create") return Boolean(c.date && c.startMin != null && c.endMin != null)
     const e = data.events.find((x) => x.id === c.eventId)
     if (!e || e.status !== "planned") return false
+    if (c.action === "move" && (c.date ?? e.date) === e.date && (c.startMin ?? e.startMin) === e.startMin) return false
     return e.date > now.date || (e.date === now.date && e.endMin > now.minute)
   })
 }
