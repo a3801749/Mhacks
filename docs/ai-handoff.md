@@ -117,9 +117,10 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 - The client sends `today` and `now`. Do not compute "today" on the server from UTC if a user-facing day is involved.
 - `windowDates(today)` is today−3 through today+3 (`WINDOW_BACK`, `WINDOW_AHEAD`), so today is centered. The Today strip and backtracking stats use this window.
-- `projectHealth` pace: `done` when remaining is 0 or percent ≥ 100; `ahead` when upcoming planned minutes cover the estimate; `behind` when ≤4 days remain and less than 60% of the remainder is booked; otherwise `on-track`.
+- `projectHealth` pace: `done` when a reliable estimate has no remaining work or percent ≥ 100; `ahead` when planned **work** minutes from today through the due date cover the estimate; `behind` when ≤4 days remain and less than 60% of the remainder is booked; otherwise `on-track`. An uncertain estimate cannot imply Done or Ahead, and is Behind near its deadline.
 - `estimateProject`: if the user has reported progress and logged time, blend a pace estimate with the category estimate. The blend trusts pace more as progress passes 50% (`weight = min(1, progress/50)`). Otherwise use the course+type multiplier from finished assignments, then type-only, then the user's original target. Finished assignments are the training set (`completedDate` set).
 - Rhythm wind-down (`rhythmInsights`) ignores today's night. A partial day reads as "wrapping up early" and is a known bug if you include it. Sessions before 4:00 count toward the previous night (`windDownByDay`).
+- Disabling check-ins excludes saved ratings from both `recentMood` and `moodCorrelation`, including the local planner and Gemini's rhythm context. It does not delete the saved entries.
 
 ## Pins and the planner
 

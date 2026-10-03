@@ -53,6 +53,7 @@ export function planCandidates(data: WeekData, today: string) {
 }
 
 export function recentMood(data: WeekData, today: string) {
+  if (!data.settings.checkInEnabled) return []
   return data.checkIns
     .filter((c) => c.date < today)
     .sort((a, b) => b.date.localeCompare(a.date))
