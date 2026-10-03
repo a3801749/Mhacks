@@ -367,7 +367,8 @@ export function rhythmInsights(data: WeekData, today: string, days: number): Rhy
     })
   }
 
-  const wind = windDownByDay(list)
+  // Today's night isn't over yet, so its wind-down would read as artificially early.
+  const wind = windDownByDay(list).filter((w) => w.date < today)
   if (wind.length >= 6) {
     const half = Math.floor(wind.length / 2)
     const avg = (xs: { end: number }[]) => xs.reduce((s, x) => s + x.end, 0) / xs.length

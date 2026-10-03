@@ -56,7 +56,19 @@ export function ProjectRail({
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium">{h.project.name}</h3>
+                  <h3 className="truncate text-sm font-medium">
+                    {onEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => onEdit(h.project)}
+                        className="max-w-full truncate text-left underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {h.project.name}
+                      </button>
+                    ) : (
+                      h.project.name
+                    )}
+                  </h3>
                   <p className="mt-1 flex flex-wrap gap-1">
                     <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
                       {h.project.course}
