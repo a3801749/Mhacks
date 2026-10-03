@@ -1,0 +1,99 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
+import { nowMinutes, toDateKey } from "@/lib/time"
+import type { CalendarEvent, GuidanceMode, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+
+export type LoadedWeek = WeekData & { integrations?: Integrations }
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`)
+  return body as T
+}
+
+export function useClock() {
+  const [now, setNow] = useState<{ date: string; minute: number } | null>(null)
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date()
+      setNow({ date: toDateKey(d), minute: nowMinutes(d) })
+    }
+    tick()
+    const id = setInterval(tick, 30_000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
+export function useWeek(today: string | null) {
+  const [data, setData] = useState<LoadedWeek | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [integrations, setIntegrations] = useState<Integrations | null>(null)
+
+  const load = useCallback(async () => {
+    if (!today) return
+    setError(null)
+    try {
+      const week = await request<LoadedWeek>(`/api/week?today=${today}`)
+      setData(week)
+      if (week.integrations) setIntegrations(week.integrations)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load your calendar")
+    }
+  }, [today])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount / day change
+    load()
+  }, [load])
+
+  const mutate = useCallback(async (fn: () => Promise<WeekData>, success?: string) => {
+    try {
+      const next = await fn()
+      setData((prev) => ({ ...next, integrations: prev?.integrations }))
+      if (success) toast.success(success)
+      return next
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That didn't save")
+      return null
+    }
+  }, [])
+
+  const json = (body: unknown) => JSON.stringify(body)
+
+  return {
+    data,
+    error,
+    integrations,
+    reload: load,
+    replace: (next: WeekData) => setData((prev) => ({ ...next, integrations: prev?.integrations })),
+    logTime: (eventId: string, minutes: number, note: string) =>
+      mutate(
+        () => request(`/api/events/${eventId}/log`, { method: "POST", body: json({ minutes, note }) }),
+        `Logged ${minutes} minutes. Nice.`,
+      ),
+    updateEvent: (eventId: string, patch: Partial<Pick<CalendarEvent, "status" | "date" | "startMin" | "endMin">>, msg?: string) =>
+      mutate(() => request(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
+    setTaskDone: (taskId: string, done: boolean) =>
+      mutate(
+        () => request(`/api/tasks/${taskId}`, { method: "PATCH", body: json({ done }) }),
+        done ? "Task done. Take a breath." : "Task reopened",
+      ),
+    applyChanges: (changes: ScheduleChange[], msg = "Schedule updated") =>
+      mutate(() => request(`/api/schedule/apply`, { method: "POST", body: json({ changes }) }), msg),
+    setMode: (guidanceMode: GuidanceMode) =>
+      mutate(() => request(`/api/settings`, { method: "PUT", body: json({ guidanceMode }) })),
+    reset: () =>
+      mutate(() => request(`/api/reset`, { method: "POST", body: json({ today }) }), "Demo data restored"),
+  }
+}
+
+export type WeekApi = ReturnType<typeof useWeek>
+
+export { request }
