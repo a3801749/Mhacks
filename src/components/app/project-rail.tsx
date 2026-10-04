@@ -147,17 +147,27 @@ function PinnedList({
 }) {
   const { api } = useApp()
   const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null)
+  const [reordering, setReordering] = useState(false)
+  const dragRef = useRef<{ id: string; order: string[] } | null>(null)
+  const reorderLock = useRef(false)
   const rows = useRef(new Map<string, HTMLLIElement>())
   const byId = new Map(items.map((h) => [h.project.id, h]))
   const order = drag?.order ?? items.map((h) => h.project.id)
 
   const commit = (next: string[]) => {
-    if (next.join() !== items.map((h) => h.project.id).join()) api.reorderPins(next)
+    if (reorderLock.current || next.join() === items.map((h) => h.project.id).join()) return
+    reorderLock.current = true
+    setReordering(true)
+    void Promise.resolve(api.reorderPins(next)).finally(() => {
+      reorderLock.current = false
+      setReordering(false)
+    })
   }
 
   const onMove = (e: React.PointerEvent) => {
-    if (!drag) return
-    const others = drag.order.filter((id) => id !== drag.id)
+    const current = dragRef.current
+    if (!current) return
+    const others = current.order.filter((id) => id !== current.id)
     let index = others.length
     for (let i = 0; i < others.length; i++) {
       const rect = rows.current.get(others[i])?.getBoundingClientRect()
@@ -166,8 +176,12 @@ function PinnedList({
         break
       }
     }
-    const next = [...others.slice(0, index), drag.id, ...others.slice(index)]
-    if (next.join() !== drag.order.join()) setDrag({ ...drag, order: next })
+    const next = [...others.slice(0, index), current.id, ...others.slice(index)]
+    if (next.join() !== current.order.join()) {
+      const updated = { id: current.id, order: next }
+      dragRef.current = updated
+      setDrag(updated)
+    }
   }
 
   const nudge = (id: string, by: number) => {
@@ -199,17 +213,26 @@ function PinnedList({
               <button
                 type="button"
                 aria-label={`Reorder ${h.project.name}. Use the up and down arrow keys.`}
-                className="-ml-1.5 flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:cursor-grabbing"
+                disabled={reordering}
+                className="-ml-1.5 flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:cursor-grabbing disabled:cursor-default disabled:opacity-40"
                 onPointerDown={(e) => {
+                  if (reorderLock.current || e.button !== 0) return
                   e.currentTarget.setPointerCapture(e.pointerId)
-                  setDrag({ id, order: items.map((x) => x.project.id) })
+                  const next = { id, order: items.map((x) => x.project.id) }
+                  dragRef.current = next
+                  setDrag(next)
                 }}
                 onPointerMove={onMove}
                 onPointerUp={() => {
-                  if (drag) commit(drag.order)
+                  const current = dragRef.current
+                  dragRef.current = null
+                  setDrag(null)
+                  if (current) commit(current.order)
+                }}
+                onPointerCancel={() => {
+                  dragRef.current = null
                   setDrag(null)
                 }}
-                onPointerCancel={() => setDrag(null)}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                     e.preventDefault()

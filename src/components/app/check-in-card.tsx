@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Annoyed, Frown, Laugh, Loader2, Meh, Pencil, Smile } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +21,7 @@ export function CheckInCard({ date }: { date: string }) {
   const [rating, setRating] = useState<number | null>(null)
   const [note, setNote] = useState("")
   const [saving, setSaving] = useState(false)
+  const lock = useRef(false)
   const label = date === today ? "today" : weekdayLong(date)
 
   if (existing && !editing) {
@@ -50,11 +51,16 @@ export function CheckInCard({ date }: { date: string }) {
   }
 
   const save = async () => {
-    if (rating == null) return
+    if (rating == null || lock.current) return
+    lock.current = true
     setSaving(true)
-    const ok = await api.saveCheckIn(date, rating, note.trim())
-    setSaving(false)
-    if (ok) setEditing(false)
+    try {
+      const ok = await api.saveCheckIn(date, rating, note.trim())
+      if (ok) setEditing(false)
+    } finally {
+      lock.current = false
+      setSaving(false)
+    }
   }
 
   return (
@@ -67,11 +73,13 @@ export function CheckInCard({ date }: { date: string }) {
         {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
           <button
             key={n}
+            type="button"
             role="radio"
             aria-checked={rating === n}
+            disabled={saving}
             onClick={() => setRating(n)}
             className={cn(
-              "h-9 rounded-lg border text-sm tabular-nums transition-colors",
+              "h-9 rounded-lg border text-sm tabular-nums transition-colors disabled:opacity-50",
               rating === n ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-accent",
             )}
           >
@@ -90,11 +98,17 @@ export function CheckInCard({ date }: { date: string }) {
             onChange={(e) => setNote(e.target.value)}
             placeholder="Anything worth remembering? (optional)"
             maxLength={280}
+            disabled={saving}
           />
-          <Button onClick={save} disabled={saving}>
+          <Button type="button" onClick={save} disabled={saving}>
             {saving && <Loader2 className="animate-spin" />}
             Save
           </Button>
+          {existing && (
+            <Button type="button" variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
+              Cancel
+            </Button>
+          )}
         </div>
       )}
     </div>

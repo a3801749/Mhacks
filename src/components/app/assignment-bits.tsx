@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef, useState } from "react"
 import { Pin } from "lucide-react"
 import type { Pace } from "@/lib/analytics"
 import { formatDue } from "@/lib/time"
@@ -39,15 +40,28 @@ export function Tag({ children, className }: { children: React.ReactNode; classN
 
 export function PinButton({ project, className }: { project: Project; className?: string }) {
   const { api } = useApp()
+  const lock = useRef(false)
+  const [busy, setBusy] = useState(false)
   return (
     <button
       type="button"
       aria-pressed={project.pinned}
       aria-label={project.pinned ? `Unpin ${project.name}` : `Pin ${project.name}`}
       title={project.pinned ? "Unpin" : "Pin"}
-      onClick={() => api.togglePin(project.id, !project.pinned)}
+      disabled={busy}
+      onClick={async () => {
+        if (lock.current) return
+        lock.current = true
+        setBusy(true)
+        try {
+          await api.togglePin(project.id, !project.pinned)
+        } finally {
+          lock.current = false
+          setBusy(false)
+        }
+      }}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40",
         project.pinned ? "text-primary" : "text-muted-foreground/60 hover:text-foreground",
         className,
       )}

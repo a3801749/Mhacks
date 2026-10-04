@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -22,6 +22,16 @@ export function CourseField({
   const listId = useId()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
+  const closeTimer = useRef<number | null>(null)
+  const clearClose = () => {
+    if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
+    closeTimer.current = null
+  }
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
+    }
+  }, [])
   const q = value.trim().toLowerCase()
   const options = [...courses].sort((a, b) => {
     const am = q && a.toLowerCase().includes(q) ? 0 : 1
@@ -46,12 +56,20 @@ export function CourseField({
         autoComplete="off"
         value={value}
         placeholder={placeholder}
+        maxLength={40}
         onChange={(e) => {
           onChange(e.target.value)
+          clearClose()
           setOpen(true)
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onFocus={() => {
+          clearClose()
+          setOpen(true)
+        }}
+        onBlur={() => {
+          clearClose()
+          closeTimer.current = window.setTimeout(() => setOpen(false), 120)
+        }}
         onKeyDown={(e) => {
           if (!open && e.key === "ArrowDown") setOpen(true)
           if (e.key === "ArrowDown") {
@@ -60,9 +78,9 @@ export function CourseField({
           } else if (e.key === "ArrowUp") {
             e.preventDefault()
             setActive((i) => Math.max(0, i - 1))
-          } else if (e.key === "Enter" && open && active >= 0) {
+          } else if (e.key === "Enter" && open) {
             e.preventDefault()
-            pick(options[active])
+            if (active >= 0 && options[active]) pick(options[active])
           } else if (e.key === "Escape") {
             setOpen(false)
           }
@@ -84,8 +102,11 @@ export function CourseField({
                 key={c}
                 role="option"
                 aria-selected={selected}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(c)}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  clearClose()
+                  pick(c)
+                }}
                 onMouseEnter={() => setActive(i)}
                 className={cn(
                   "flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 text-sm",

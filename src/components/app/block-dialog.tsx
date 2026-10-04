@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Check, CheckCircle2, Loader2, MessageCircleHeart, Moon, Pencil, RotateCcw, Timer, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -84,12 +84,22 @@ function BlockBody({
   const logged = task ? taskLogged(task.id, data.logs) : 0
   const canLog = live.kind === "work" && live.status !== "skipped"
   const showProgress = project && live.kind === "work"
+  const busyRef = useRef<string | null>(null)
+  const editorKey = [
+    live.id, live.date, live.startMin, live.endMin, live.title, live.kind, live.projectId ?? "", live.taskId ?? "",
+    live.location, live.meetingUrl, live.notes, live.status, data.series.find((s) => s.id === live.seriesId)?.revision ?? 0,
+  ].join("\u0000")
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
+    if (busyRef.current) return null
+    busyRef.current = key
     setBusy(key)
-    const out = await fn()
-    setBusy(null)
-    return out
+    try {
+      return await fn()
+    } finally {
+      busyRef.current = null
+      setBusy(null)
+    }
   }
 
   return (
@@ -112,7 +122,7 @@ function BlockBody({
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}><Pencil />{editing ? "Close editor" : "Edit block"}</Button>
           {project && <Button variant="ghost" size="sm" onClick={() => { onOpenChange(false); editProject(project) }}>Edit assignment · due date & estimate</Button>}
         </div>
-        {editing && <BlockForm key={`${live.id}-${live.date}-${live.startMin}-${live.endMin}`} event={live} draft={{ date: live.date }} onDone={() => { setEditing(false); onOpenChange(false) }} />}
+        {editing && <BlockForm key={editorKey} event={live} draft={{ date: live.date }} onDone={() => { setEditing(false); onOpenChange(false) }} />}
         {!editing && <>
         {(live.location || live.meetingUrl || live.notes || live.seriesId) && <div className="space-y-1 rounded-md border p-3 text-sm">
           {live.location && <p>{live.location}</p>}
@@ -123,6 +133,7 @@ function BlockBody({
 
         {askProgress && project && !project.completedDate && (
           <ProgressReport
+            key={`${project.id}-${displayedPercent(project, data)}-ask`}
             project={project}
             data={data}
             api={api}
@@ -218,6 +229,7 @@ function LogTime({ event, api }: { event: CalendarEvent; api: WeekApi }) {
   const [amount, setAmount] = useState("")
   const [unit, setUnit] = useState<"hr" | "min">("hr")
   const [busy, setBusy] = useState<string | null>(null)
+  const lock = useRef<string | null>(null)
   const planned = event.endMin - event.startMin
   const remainingInBlock = Math.max(0, planned - event.actualMinutes)
 
@@ -235,12 +247,18 @@ function LogTime({ event, api }: { event: CalendarEvent; api: WeekApi }) {
             : null
 
   const log = async (key: string, minutes: number) => {
+    if (lock.current) return
+    lock.current = key
     setBusy(key)
-    const ok = await api.logTime(event.id, minutes, note.trim())
-    setBusy(null)
-    if (ok) {
-      setNote("")
-      setAmount("")
+    try {
+      const ok = await api.logTime(event.id, minutes, note.trim())
+      if (ok) {
+        setNote("")
+        setAmount("")
+      }
+    } finally {
+      lock.current = null
+      setBusy(null)
     }
   }
 
@@ -282,7 +300,7 @@ function LogTime({ event, api }: { event: CalendarEvent; api: WeekApi }) {
               type="button"
               role="radio"
               aria-checked={direction === d}
-              disabled={d === "remove" && maxRemove === 0}
+              disabled={busy !== null || (d === "remove" && maxRemove === 0)}
               onClick={() => setDirection(d)}
               className={cn(
                 "rounded-sm px-2.5 py-1 text-xs capitalize transition-colors disabled:opacity-40",
@@ -364,6 +382,7 @@ function TrailEditor({ log, api, onDone }: { log: TimeLog; api: WeekApi; onDone:
   const [minutes, setMinutes] = useState(String(log.minutes))
   const [note, setNote] = useState(log.note)
   const [busy, setBusy] = useState<"save" | "delete" | null>(null)
+  const lock = useRef<"save" | "delete" | null>(null)
   const n = Math.round(Number(minutes))
   const valid = Number.isFinite(n) && n !== 0 && Math.abs(n) <= MAX_LOG_MINUTES
 
@@ -386,10 +405,16 @@ function TrailEditor({ log, api, onDone }: { log: TimeLog; api: WeekApi; onDone:
           size="sm"
           disabled={!valid || busy !== null}
           onClick={async () => {
+            if (lock.current) return
+            lock.current = "save"
             setBusy("save")
-            const ok = await api.updateLog(log.id, { minutes: n, note })
-            setBusy(null)
-            if (ok) onDone()
+            try {
+              const ok = await api.updateLog(log.id, { minutes: n, note })
+              if (ok) onDone()
+            } finally {
+              lock.current = null
+              setBusy(null)
+            }
           }}
         >
           {busy === "save" ? <Loader2 className="animate-spin" /> : <Check />} Save
@@ -403,10 +428,16 @@ function TrailEditor({ log, api, onDone }: { log: TimeLog; api: WeekApi; onDone:
           className="ml-auto text-red-700 hover:text-red-800"
           disabled={busy !== null}
           onClick={async () => {
+            if (lock.current) return
+            lock.current = "delete"
             setBusy("delete")
-            const ok = await api.deleteLog(log.id)
-            setBusy(null)
-            if (ok) onDone()
+            try {
+              const ok = await api.deleteLog(log.id)
+              if (ok) onDone()
+            } finally {
+              lock.current = null
+              setBusy(null)
+            }
           }}
         >
           {busy === "delete" ? <Loader2 className="animate-spin" /> : <Trash2 />} Delete
@@ -434,6 +465,7 @@ export function ProgressReport({
   const [initial] = useState(() => displayedPercent(project, data))
   const [value, setValue] = useState(initial)
   const [saving, setSaving] = useState(false)
+  const lock = useRef(false)
   const dirty = value !== initial || project.progressPercent == null
   const estimate = estimateProject({ ...project, progressPercent: value }, data)
 
@@ -448,6 +480,7 @@ export function ProgressReport({
         min={0}
         max={100}
         step={5}
+        disabled={saving}
         onValueChange={(v) => setValue(Array.isArray(v) ? v[0] : v)}
         aria-label="Assignment progress"
       />
@@ -467,17 +500,23 @@ export function ProgressReport({
             size="sm"
             disabled={saving || !dirty}
             onClick={async () => {
+              if (lock.current || !dirty) return
+              lock.current = true
               setSaving(true)
-              const ok = await api.updateProject(project.id, { progressPercent: value, ...(project.completedDate && value < 100 ? { completedDate: null } : {}) }, "Assignment progress saved")
-              setSaving(false)
-              if (ok) onSaved?.()
+              try {
+                const ok = await api.updateProject(project.id, { progressPercent: value, ...(project.completedDate && value < 100 ? { completedDate: null } : {}) }, "Assignment progress saved")
+                if (ok) onSaved?.()
+              } finally {
+                lock.current = false
+                setSaving(false)
+              }
             }}
           >
             {saving && <Loader2 className="animate-spin" />}
             {project.completedDate && value < 100 ? "Save progress & reopen" : "Save progress"}
           </Button>
           {highlight && (
-            <Button size="sm" variant="ghost" onClick={onSaved}>
+            <Button size="sm" variant="ghost" onClick={onSaved} disabled={saving}>
               Not now
             </Button>
           )}

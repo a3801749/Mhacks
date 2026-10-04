@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ChevronDown, Loader2, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -45,6 +45,7 @@ function Suggestions({ block, onDone }: { block: DraftBlock; onDone: () => void 
   const [version, setVersion] = useState(0)
   const [result, setResult] = useState<{ key: string; plan?: PlanBreakdown; error?: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const lock = useRef(false)
   const valid = validDate(block.date) && Number.isInteger(block.startMin) && Number.isInteger(block.endMin) && block.startMin >= 0 && block.endMin <= 1440 && block.endMin - block.startMin >= 15
   const snapshot = JSON.stringify([data.projects, data.tasks, data.events, data.logs, data.checkIns, data.settings])
   const key = JSON.stringify([block, today, snapshot, version])
@@ -81,11 +82,17 @@ function Suggestions({ block, onDone }: { block: DraftBlock; onDone: () => void 
         </li>
       })}</ol>
       {plan.segments.length > 0 ? <Button className="w-full" disabled={saving} onClick={async () => {
+        if (lock.current) return
+        lock.current = true
         const changes: ScheduleChange[] = plan.segments.map((s) => ({ action: "create", date: block.date, startMin: s.startMin, endMin: s.endMin, taskId: s.taskId, projectId: taskById.get(s.taskId)?.projectId, title: taskById.get(s.taskId)?.title, reason: s.why }))
         setSaving(true)
-        const ok = await api.applyChanges(changes, "Suggestions added to your calendar")
-        setSaving(false)
-        if (ok) onDone()
+        try {
+          const ok = await api.applyChanges(changes, "Suggestions added to your calendar")
+          if (ok) onDone()
+        } finally {
+          lock.current = false
+          setSaving(false)
+        }
       }}>{saving && <Loader2 className="animate-spin" />}Add {plan.segments.length} suggested block{plan.segments.length === 1 ? "" : "s"}</Button> : <p className="text-sm text-muted-foreground">No suggested blocks for this window.</p>}
     </>}
   </div>
