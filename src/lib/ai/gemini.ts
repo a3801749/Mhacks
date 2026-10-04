@@ -6,7 +6,7 @@ import { ApiError, GoogleGenAI } from "@google/genai"
 // and walk down this list on 404/429/5xx/timeouts, within one overall budget.
 const MODELS = [
   ...new Set(
-    [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-lite-latest"]
+    [process.env.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest"]
       .filter(Boolean) as string[],
   ),
 ]
