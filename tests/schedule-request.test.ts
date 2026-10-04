@@ -39,6 +39,16 @@ test("negated and hypothetical scheduling messages do not force a new event", ()
   }
 })
 
+test("the offline fallback leaves work alone when scheduling is declined or only a question", () => {
+  for (const guidanceMode of ["coach", "autopilot"] as const) {
+    const data = week({ events: [event()] })
+    data.settings.guidanceMode = guidanceMode
+    for (const message of ["don't schedule dinner at 8pm Wednesday", "do not add coffee at 9am tomorrow", "What if I schedule dinner at 8pm?", "Should I schedule a call at 2pm?"]) {
+      assert.deepEqual(mockAdjust(data, message, [], { date: today, minute: 540 }).changes, [])
+    }
+  }
+})
+
 test("the offline fallback creates the event and moves what is in the way", () => {
   const study = event({ id: "study", kind: "life", projectId: null, taskId: null, title: "Study group", date: wednesday, startMin: 1140, endMin: 1260 })
   const res = mockAdjust(week({ events: [study] }), "I wasn't able to get dinner with sam yesterday. can you schedule something for 8pm on wednesday?", [], { date: today, minute: 600 })

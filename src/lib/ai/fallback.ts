@@ -47,13 +47,18 @@ function pickTarget(message: string, upcoming: CalendarEvent[], data: WeekData) 
 const AFFIRM = /\b(yes|yeah|yep|sure|ok|okay|fine|do it|anyway|please|go ahead)\b/i
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
 const PLANS = /\b(breakfast|brunch|lunch|dinner|coffee|drinks|meeting|call|study session|study group|office hours|gym|workout|run|practice|appointment|hangout)\b(\s+with\s+[a-z]+)?/i
+const SCHEDULE_VERBS = /\b(schedule|add|book|put|plan|set up|make time)\b/i
+
+function isSchedulingDiscussion(message: string) {
+  return SCHEDULE_VERBS.test(message) &&
+    (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time)\b/i.test(message) ||
+      /\b(?:what if|should (?:i|we))\b/i.test(message))
+}
 
 /** Reads "schedule something for 8pm on Wednesday" style requests; null when it isn't one. */
 export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
   const lower = message.toLowerCase()
-  if (!/\b(schedule|add|book|put|plan|set up|make time)\b/.test(lower)) return null
-  if (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time)\b/.test(lower) ||
-    /\b(?:what if|should (?:i|we))\b/.test(lower)) return null
+  if (!SCHEDULE_VERBS.test(message) || isSchedulingDiscussion(message)) return null
   const time = lower.match(/\b(?:at|for|around)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/) ??
     lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)/)
   if (!time) return null
@@ -154,6 +159,9 @@ export function mockAdjust(
   history: ChatTurn[],
   now: { date: string; minute: number },
 ): AdjustResponse {
+  if (isSchedulingDiscussion(message)) {
+    return { reply: "Tell me what you'd like to schedule when you're ready.", changes: [], source: "mock" }
+  }
   const request = parseScheduleRequest(message, history, now.date)
   if (request) return mockScheduleRequest(data, request, now)
   const upcoming = upcomingWork(data, now)
