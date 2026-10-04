@@ -136,7 +136,11 @@ export function SettingsDialog({
         </Button>
         <Link
           href="/welcome"
-          onClick={() => onOpenChange(false)}
+          onClick={() => {
+            onOpenChange(false)
+            // Same-page navigation does not remount the wizard, so tell it to start over.
+            window.dispatchEvent(new Event("andy:replay-welcome"))
+          }}
           className="text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
           Replay the welcome tour

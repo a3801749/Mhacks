@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -34,6 +34,7 @@ import { ScreenTimePreview } from "./screen-time-preview"
 import { TillyOrb } from "./voice-agent"
 
 export const ONBOARDED_KEY = "andy:onboarded"
+const REPLAY_WELCOME = "andy:replay-welcome"
 
 const STEPS = ["Welcome", "Guidance", "Extras", "First assignment", "Tour"] as const
 const MODE_ICONS = { anchor: Anchor, coach: Lighthouse, autopilot: Waves }
@@ -42,22 +43,43 @@ export function OnboardingView() {
   const { data, today, api } = useApp()
   const router = useRouter()
   const [step, setStep] = useState(0)
-  const [mode, setMode] = useState<GuidanceMode>(data.settings.guidanceMode)
-  const [checkIn, setCheckIn] = useState(data.settings.checkInEnabled)
-  const [planner, setPlanner] = useState(data.settings.aiPlannerEnabled)
+  // null means "user hasn't touched this step" — keep showing and saving the live setting.
+  // A captured useState(data.settings…) goes stale if Settings is changed while this page is open,
+  // and Continue would write the old value back.
+  const [modePick, setModePick] = useState<GuidanceMode | null>(null)
+  const [checkPick, setCheckPick] = useState<boolean | null>(null)
+  const [plannerPick, setPlannerPick] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
+  const mode = modePick ?? data.settings.guidanceMode
+  const checkIn = checkPick ?? data.settings.checkInEnabled
+  const planner = plannerPick ?? data.settings.aiPlannerEnabled
+
+  const restart = useCallback(() => {
+    setStep(0)
+    setModePick(null)
+    setCheckPick(null)
+    setPlannerPick(null)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener(REPLAY_WELCOME, restart)
+    return () => window.removeEventListener(REPLAY_WELCOME, restart)
+  }, [restart])
 
   const next = async () => {
     if (saving) return
-    if (step === 1 && mode !== data.settings.guidanceMode) {
+    if (step === 1 && modePick !== null && modePick !== data.settings.guidanceMode) {
       setSaving(true)
-      const saved = await api.updateSettings({ guidanceMode: mode })
+      const saved = await api.updateSettings({ guidanceMode: modePick })
       setSaving(false)
       if (!saved) return
     }
-    if (step === 2) {
+    if (step === 2 && (checkPick !== null || plannerPick !== null)) {
       setSaving(true)
-      const saved = await api.updateSettings({ checkInEnabled: checkIn, aiPlannerEnabled: planner })
+      const saved = await api.updateSettings({
+        ...(checkPick !== null ? { checkInEnabled: checkPick } : {}),
+        ...(plannerPick !== null ? { aiPlannerEnabled: plannerPick } : {}),
+      })
       setSaving(false)
       if (!saved) return
     }
@@ -65,7 +87,11 @@ export function OnboardingView() {
   }
 
   const finish = (href = "/") => {
-    localStorage.setItem(ONBOARDED_KEY, "1")
+    try {
+      localStorage.setItem(ONBOARDED_KEY, "1")
+    } catch {
+      // Storage can throw in private mode; still leave the tour.
+    }
     router.push(href)
   }
 
@@ -83,10 +109,10 @@ export function OnboardingView() {
       </ol>
 
       {step === 0 && <Welcome />}
-      {step === 1 && <GuidanceStep mode={mode} setMode={setMode} />}
-      {step === 2 && <ExtrasStep checkIn={checkIn} setCheckIn={setCheckIn} planner={planner} setPlanner={setPlanner} />}
+      {step === 1 && <GuidanceStep mode={mode} setMode={setModePick} />}
+      {step === 2 && <ExtrasStep checkIn={checkIn} setCheckIn={setCheckPick} planner={planner} setPlanner={setPlannerPick} />}
       {step === 3 && <AssignmentStep today={today} onAdded={() => setStep(4)} />}
-      {step === 4 && <TourStep onFinish={finish} />}
+      {step === 4 && <TourStep onFinish={finish} onRestart={restart} />}
 
       {step < 4 && (
         <div className="mt-8 flex items-center justify-between gap-3">
@@ -449,7 +475,7 @@ const TOUR = [
   },
 ]
 
-function TourStep({ onFinish }: { onFinish: (href?: string) => void }) {
+function TourStep({ onFinish, onRestart }: { onFinish: (href?: string) => void; onRestart: () => void }) {
   return (
     <>
       <StepHeader eyebrow="You're set" title={`Here's how ${APP_NAME} works`}>
@@ -499,7 +525,14 @@ function TourStep({ onFinish }: { onFinish: (href?: string) => void }) {
       </div>
       <p className="mt-3 text-right text-xs text-muted-foreground">
         You can replay this from{" "}
-        <Link href="/welcome" className="underline">
+        <Link
+          href="/welcome"
+          className="underline"
+          onClick={(e) => {
+            e.preventDefault()
+            onRestart()
+          }}
+        >
           /welcome
         </Link>{" "}
         or the settings dialog.
