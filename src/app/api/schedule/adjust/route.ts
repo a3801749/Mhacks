@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server"
 import { adjustSchedule } from "@/lib/ai/engine"
+import { adjustmentChanges, adjustmentReply } from "@/lib/ai/adjustment"
+import { parseScheduleRequest } from "@/lib/ai/fallback"
 import { handle, todayFrom } from "@/lib/api"
 import { getStore } from "@/lib/store"
-import { sanitizeScheduleChanges } from "@/lib/schedule-validation"
 import type { ChatTurn } from "@/lib/types"
 
 export async function POST(req: NextRequest) {
@@ -27,11 +28,12 @@ export async function POST(req: NextRequest) {
     const result = await adjustSchedule(week, message, history, now)
     // Model requests can take seconds. Respect changes to the calendar and guidance made meanwhile.
     const latest = await store.getWeek(now.date)
-    const changes = sanitizeScheduleChanges(result.changes, latest, now)
+    const changes = adjustmentChanges(result.changes, latest, parseScheduleRequest(message, history, now.date), now)
     const autoApplied = latest.settings.guidanceMode === "autopilot" && changes.length > 0
     const updated = autoApplied ? await store.applyChanges(changes) : null
-    const reply = changes.length === result.changes.length ? result.reply
-      : "Your calendar changed while I was planning. Review the remaining changes, or ask me again."
+    const reply = changes.length !== result.changes.length && changes.length === 0
+      ? "Your calendar changed while I was planning. Ask me again so I can use the latest schedule."
+      : adjustmentReply({ ...result, changes }, updated ?? latest, now, { applied: autoApplied })
     return { ...result, reply, changes, autoApplied, week: updated }
   })
 }

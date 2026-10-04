@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { adjustmentChanges } from "../src/lib/ai/adjustment"
+import { adjustmentChanges, adjustmentReply } from "../src/lib/ai/adjustment"
 import { parseScheduleRequest } from "../src/lib/ai/fallback"
 import { event, today, week } from "./fixtures"
 
@@ -75,4 +75,55 @@ test("a no-op model move is replaced only when a real block overlaps the request
   assert.equal(move.eventId, "e")
   assert.notEqual(move.startMin, 720)
   assert.equal(move.endMin! - move.startMin!, 60)
+})
+
+test("Lighthouse replies describe the effective lunch proposal and omit discarded moves", () => {
+  const data = week({ events: [event({ title: "Prototype voice flow" })] })
+  const changes = adjustmentChanges([], data, request, now)
+  const reply = adjustmentReply({ reply: "I've set up lunch and moved Prototype voice flow earlier.", changes }, data, now)
+  assert.match(reply, /I can add Lunch with Sam/)
+  assert.match(reply, /Apply the changes/)
+  assert.doesNotMatch(reply, /Prototype|moved|set up|added/)
+})
+
+test("Tide replies use completed wording only after application", () => {
+  const data = week()
+  const changes = adjustmentChanges([], data, request, now)
+  const reply = adjustmentReply({ reply: "Here is a proposal", changes }, data, now, { applied: true })
+  assert.match(reply, /I added Lunch with Sam/)
+  assert.doesNotMatch(reply, /Apply the changes/)
+})
+
+test("Tide checks the saved calendar without adding the event a second time in its preview", () => {
+  const saved = week({ events: [event({ title: "Lunch with Sam", date, startMin: 720, endMin: 780,
+    kind: "life", taskId: null, projectId: null })] })
+  const changes = adjustmentChanges([], week(), request, now)
+  const reply = adjustmentReply({ reply: "Saved", changes }, saved, now, { applied: true })
+  assert.doesNotMatch(reply, /overlap/)
+})
+
+test("a remaining overlap is still announced in the effective proposal", () => {
+  const data = week({ events: [event({ title: "All-day commitment", kind: "life", date, startMin: 360, endMin: 1440 })] })
+  const changes = adjustmentChanges([], data, request, now)
+  assert.match(adjustmentReply({ reply: "The slot is free", changes }, data, now), /overlap remains/)
+})
+
+test("empty or fully discarded proposals never retain a false claim of success", () => {
+  const reply = "I've set up lunch with Sam for Wednesday at three. I also moved your reading block earlier."
+  const safe = adjustmentReply({ reply, changes: [] }, week(), now)
+  assert.match(safe, /No calendar changes/)
+  assert.doesNotMatch(safe, /set up|moved/)
+  const discarded = adjustmentReply({ reply: "Here are the changes", changes: [] }, week(), now, { discarded: true })
+  assert.match(discarded, /No calendar changes/)
+})
+
+test("a missing-time question remains intact when it contains no actions", () => {
+  const reply = "What time on Wednesday should I set for Lunch with Sam?"
+  assert.equal(adjustmentReply({ reply, changes: [] }, week(), now), reply)
+})
+
+test("a model shortening to exactly the same interval has no effective change", () => {
+  const changes = adjustmentChanges([{ action: "shorten", eventId: "e", startMin: 600, endMin: 660, reason: "Shorter" }],
+    week({ events: [event()] }), null, now)
+  assert.deepEqual(changes, [])
 })

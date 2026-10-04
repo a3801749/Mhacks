@@ -13,7 +13,7 @@ import {
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { sanitizeScheduleChanges } from "../schedule-validation"
 import { mockAdjust, mockReflect, parseScheduleRequest, scheduleClarification } from "./fallback"
-import { adjustmentChanges } from "./adjustment"
+import { adjustmentChanges, adjustmentReply } from "./adjustment"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
 import {
@@ -87,13 +87,15 @@ export async function adjustSchedule(
         },
         ADJUST_RESPONSE_SCHEMA,
       )
-      return { reply: out.reply, changes: adjustmentChanges(out.changes, data, request, now), source: "gemini" }
+      const changes = adjustmentChanges(out.changes, data, request, now)
+      return { reply: adjustmentReply({ reply: out.reply, changes }, data, now, { discarded: out.changes?.length > 0 }), changes, source: "gemini" }
     } catch (err) {
       console.error("[gemini] adjust failed, using fallback:", err)
     }
   }
   const fallback = mockAdjust(data, message, history, now)
-  return { ...fallback, changes: adjustmentChanges(fallback.changes, data, request, now) }
+  const changes = adjustmentChanges(fallback.changes, data, request, now)
+  return { ...fallback, reply: adjustmentReply({ ...fallback, changes }, data, now, { discarded: fallback.changes.length > 0 }), changes }
 }
 
 export async function reflect(data: WeekData, today: string, minute = 0): Promise<Reflection> {

@@ -110,7 +110,7 @@ function check(change: ScheduleChange, events: WeekData["events"], now: Schedule
   if (date < now.date || startMin < earliest || endMin > latest) return "drop"
   const continuing = change.action === "shorten" && startMin === original?.startMin && endMin > now.minute
   if (date === now.date && startMin < now.minute && !continuing) return "drop"
-  if (change.action === "move" && date === original?.date && startMin === original.startMin && endMin === original.endMin) return "drop"
+  if ((change.action === "move" || change.action === "shorten") && date === original?.date && startMin === original.startMin && endMin === original.endMin) return "drop"
   if (events.some((e) => e.id !== change.eventId && e.status !== "skipped" && e.date === date && e.startMin < endMin && e.endMin > startMin)) return "clash"
   return "ok"
 }
