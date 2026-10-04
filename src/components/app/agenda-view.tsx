@@ -10,7 +10,7 @@ import { dayLoad, projectHealth, type Busyness, type Pace } from "@/lib/analytic
 import { addDays, daysBetween, formatRange, fromDateKey, monthDay, toDateKey, weekdayLong, weekdayShort } from "@/lib/time"
 import type { AssignmentType, CalendarEvent, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { courseList } from "@/lib/courses"
+import { courseList, matchesCourse } from "@/lib/courses"
 import { useApp } from "./app-shell"
 import { dueText, PaceTag, PinButton, ProgressBar, Tag } from "./assignment-bits"
 import { Segmented } from "./rhythm-view"
@@ -73,7 +73,7 @@ export function AgendaView() {
 
   const matches = (p: Project | undefined) => {
     if (!p) return courses.size === 0 && types.size === 0
-    return (courses.size === 0 || courses.has(p.course)) && (types.size === 0 || types.has(p.type))
+    return matchesCourse(p.course, courses) && (types.size === 0 || types.has(p.type))
   }
 
   const rows = rowsFor(data, today, finished)

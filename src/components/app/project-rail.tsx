@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowRight, GripVertical, Pin, Plus, Sparkles, X } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AGENT_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
-import { courseList } from "@/lib/courses"
+import { courseKey, courseList } from "@/lib/courses"
 import { pinPreferenceLabel, pinPreferences, projectHealth, type ProjectHealth } from "@/lib/analytics"
 import { formatDue } from "@/lib/time"
 import type { Project, WeekData } from "@/lib/types"
@@ -36,21 +36,23 @@ export function ProjectRail({
   const soon = health.filter((h) => !h.project.pinned).slice(0, DUE_SOON)
   const learned = pinPreferenceLabel(pinPreferences(data))
 
-  const classes = [...new Set(health.map((h) => h.project.course))]
-    .map((course) => {
-      const items = health.filter((h) => h.project.course === course)
+  const knownCourses = courseList(data)
+  const classes = knownCourses
+    .flatMap((course) => {
+      const items = health.filter((h) => courseKey(h.project.course) === courseKey(course.name))
+      if (items.length === 0) return []
       const ids = new Set(items.map((h) => h.project.id))
-      return {
-        course,
-        color: items[0].project.color,
+      return [{
+        course: course.name,
+        color: course.color,
         tasks: data.tasks.filter((t) => ids.has(t.projectId) && !t.done).length,
         next: items[0].project.dueDate,
         behind: items.some((h) => h.pace === "behind"),
-      }
+      }]
     })
     .sort((a, b) => a.next.localeCompare(b.next))
-  const active = new Set(classes.map((c) => c.course.toLowerCase()))
-  const quiet = courseList(data).filter((c) => !active.has(c.name.toLowerCase()))
+  const active = new Set(classes.map((c) => courseKey(c.course)))
+  const quiet = knownCourses.filter((c) => !active.has(courseKey(c.name)))
 
   return (
     <section className={cn("flex min-h-0 flex-col gap-5", className)} aria-labelledby={headingId}>
@@ -96,7 +98,7 @@ export function ProjectRail({
                   <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: c.color }} aria-hidden />
                   <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
                   <span className="text-xs whitespace-nowrap text-muted-foreground">No open work</span>
-                  {c.standalone && !data.projects.some((p) => p.course.toLowerCase() === c.name.toLowerCase()) && <RemoveCourseButton name={c.name} />}
+                  {c.standalone && !data.projects.some((p) => courseKey(p.course) === courseKey(c.name)) && <RemoveCourseButton name={c.name} />}
                 </li>
               ))}
             </ul>

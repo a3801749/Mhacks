@@ -1,4 +1,5 @@
 import { ASSIGNMENT_TYPES, PRIORITIES } from "./brand"
+import { courseKey, courseList } from "./courses"
 import { addDays, daysBetween, formatClock, formatDuration } from "./time"
 import type { CalendarEvent, Project, Task, TimeLog, WeekData } from "./types"
 
@@ -391,8 +392,8 @@ export function groupKey(projectId: string | null, data: WeekData, by: RhythmGro
   if (!p) return { key: "other", label: "Other", color: "#A8A29E" }
   if (by === "project") return { key: p.id, label: p.name, color: p.color }
   if (by === "course") {
-    const first = data.projects.find((x) => x.course === p.course)!
-    return { key: p.course, label: p.course, color: first.color }
+    const course = courseList(data).find((c) => courseKey(c.name) === courseKey(p.course))
+    return { key: courseKey(p.course), label: course?.name ?? p.course, color: course?.color ?? p.color }
   }
   return { key: p.type, label: ASSIGNMENT_TYPES[p.type], color: TYPE_COLORS[p.type] }
 }
