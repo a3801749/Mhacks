@@ -181,6 +181,11 @@ export function VoiceAgent({
     [api, now, speak, thinking, turns, applyingTurn],
   )
 
+  const sendRef = useRef(send)
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
+
   useEffect(() => {
     if (open && queued) {
       onQueuedConsumed()
@@ -218,8 +223,9 @@ export function VoiceAgent({
     rec.onend = () => {
       setListening(false)
       recognitionRef.current = null
-      if (finalText) send(finalText)
-      else setInterim("")
+      setInterim("")
+      // The closure captured when the mic opened may predate Tilly finishing her last reply.
+      if (finalText) sendRef.current(finalText)
     }
     recognitionRef.current = rec
     setListening(true)
@@ -403,6 +409,7 @@ export function VoiceAgent({
             variant={listening ? "destructive" : "default"}
             className={cn("shrink-0 rounded-full", listening && "animate-pulse")}
             onClick={toggleListening}
+            disabled={!listening && (thinking || applyingTurn !== null)}
             aria-label={listening ? "Stop listening" : "Talk to Tilly"}
             title={speechSupported ? undefined : "Voice input works in Chrome and Edge"}
           >

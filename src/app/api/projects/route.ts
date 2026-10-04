@@ -7,10 +7,10 @@ import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as Partial<NewProject>
+  const body = (await req.json().catch(() => ({}))) as Partial<NewProject>
   const name = body.name?.trim().slice(0, 80)
   if (!name) return Response.json({ error: "Give the assignment a name" }, { status: 400 })
-  if (!body.type || !(body.type in ASSIGNMENT_TYPES)) return Response.json({ error: "Pick a type" }, { status: 400 })
+  if (!body.type || !Object.hasOwn(ASSIGNMENT_TYPES, body.type)) return Response.json({ error: "Pick a type" }, { status: 400 })
   if (!validDate(body.dueDate) || !validDate(body.assignedDate)) {
     return Response.json({ error: "Assigned and due dates are required" }, { status: 400 })
   }
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       name,
       course: body.course?.trim().slice(0, 40) || "General",
       type: body.type!,
-      priority: body.priority && body.priority in PRIORITIES ? body.priority : "completion",
+      priority: body.priority && Object.hasOwn(PRIORITIES, body.priority) ? body.priority : "completion",
       notes: typeof body.notes === "string" ? body.notes.slice(0, 2000) : "",
       targetMinutes,
       assignedDate: body.assignedDate!,

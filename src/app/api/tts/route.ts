@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.ELEVENLABS_API_KEY
   if (!apiKey) return Response.json({ error: "ElevenLabs not configured" }, { status: 501 })
 
-  const { text } = (await req.json()) as { text: string }
+  const { text } = (await req.json().catch(() => ({}))) as { text: string }
   if (!text?.trim()) return Response.json({ error: "No text" }, { status: 400 })
 
   const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE.voiceId

@@ -93,6 +93,22 @@ export function useWeek(today: string | null) {
 
   const json = (body: unknown) => JSON.stringify(body)
 
+  const optimisticProjects = async (
+    change: (projects: WeekData["projects"]) => WeekData["projects"],
+    fn: () => Promise<WeekData>,
+  ) => {
+    let before: WeekData["projects"] | null = null
+    setData((prev) => {
+      if (!prev) return prev
+      before = prev.projects
+      return { ...prev, projects: change(prev.projects) }
+    })
+    const result = await mutate(fn)
+    const restore = before
+    if (!result && restore) setData((prev) => (prev ? { ...prev, projects: restore } : prev))
+    return result
+  }
+
   return {
     data,
     error,
@@ -112,17 +128,11 @@ export function useWeek(today: string | null) {
       mutate(() => request<WeekData>(`/api/logs/${logId}`, { method: "PATCH", body: json(patch) }), "Entry updated"),
     deleteLog: (logId: string) =>
       mutate(() => request<WeekData>(`/api/logs/${logId}`, { method: "DELETE" }), "Entry removed"),
-    reorderPins: (ids: string[]) => {
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              projects: prev.projects.map((p) => (ids.includes(p.id) ? { ...p, pinOrder: ids.indexOf(p.id) } : p)),
-            }
-          : prev,
-      )
-      return mutate(() => request<WeekData>(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
-    },
+    reorderPins: (ids: string[]) =>
+      optimisticProjects(
+        (projects) => projects.map((p) => (ids.includes(p.id) ? { ...p, pinOrder: ids.indexOf(p.id) } : p)),
+        () => request<WeekData>(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }),
+      ),
     updateEvent: (eventId: string, patch: EventPatch, msg?: string) =>
       mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
     createSeries: (input: NewSeries, replaceEventId?: string) =>
@@ -144,12 +154,11 @@ export function useWeek(today: string | null) {
       mutate(() => request<WeekData>(`/api/settings`, { method: "PUT", body: json({ ...patch, today }) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
       mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
-    togglePin: (projectId: string, pinned: boolean) => {
-      setData((prev) =>
-        prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? { ...p, pinned } : p)) } : prev,
-      )
-      return mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ pinned }) }))
-    },
+    togglePin: (projectId: string, pinned: boolean) =>
+      optimisticProjects(
+        (projects) => projects.map((p) => (p.id === projectId ? { ...p, pinned } : p)),
+        () => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ pinned }) }),
+      ),
     createProject: (project: NewProject) =>
       mutate(() => request<WeekData>(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
     saveCheckIn: (date: string, rating: number, note: string) =>

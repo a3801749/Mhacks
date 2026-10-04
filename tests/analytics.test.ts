@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { estimateProject, moodCorrelation, projectHealth, projectLogged, rhythmInsights } from "../src/lib/analytics"
+import { backtrack, displayedPercent, estimateProject, moodCorrelation, projectHealth, projectLogged, rhythmInsights } from "../src/lib/analytics"
 import { recentMood } from "../src/lib/ai/planner"
 import { event, project, today, week } from "./fixtures"
 
@@ -64,4 +64,30 @@ test("disabled check-ins are excluded from both planning and rhythm", () => {
   assert.equal(moodCorrelation(data, "2026-09-28", today), null)
   assert.deepEqual(recentMood(data, today), [])
   assert.ok(!rhythmInsights(data, today, 7).some((i) => i.title.includes("next day")))
+})
+
+test("an assignment finished with nothing logged does not zero out its category's estimates", () => {
+  const finished = project({ id: "old", type: "exam", completedDate: "2026-09-20", progressPercent: 100 })
+  const next = project({ id: "p", type: "exam" })
+  const data = week({ projects: [finished, next] })
+  const estimate = estimateProject(next, data)
+  assert.equal(estimate.total, next.targetMinutes)
+  assert.notEqual(projectHealth(data, today).find((h) => h.project.id === "p")!.pace, "done")
+})
+
+test("looking back ignores future blocks even after they are skipped", () => {
+  const data = week({ events: [
+    event({ id: "past", date: "2026-10-02", actualMinutes: 60, status: "completed" }),
+    event({ id: "future", date: "2026-10-05", status: "skipped" }),
+  ] })
+  const stats = backtrack(data, today)
+  assert.equal(stats.counts.total, 1)
+  assert.equal(stats.windowEnd, "2026-10-02")
+})
+
+test("displayed progress falls back to logged share until progress is reported", () => {
+  const p = project({ targetMinutes: 240 })
+  const data = week({ projects: [p], logs: [{ id: "l", taskId: "t", eventId: null, minutes: 60, note: "", createdAt: today }] })
+  assert.equal(displayedPercent(p, data), 25)
+  assert.equal(displayedPercent({ ...p, progressPercent: 70 }, data), 70)
 })

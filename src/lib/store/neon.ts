@@ -355,7 +355,7 @@ export const neonStore: Store = {
     const has = (key: keyof EventPatch) => Object.prototype.hasOwnProperty.call(patch, key)
     const result = await sql.transaction([
       sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
-      sql`UPDATE events SET
+      sql`WITH updated AS (UPDATE events SET
         status = CASE WHEN COALESCE(${patch.status ?? null}, status) = 'skipped' THEN 'skipped'
           WHEN actual_minutes > 0 AND (${patch.status != null} OR ${patch.startMin != null} OR ${patch.endMin != null})
           THEN CASE WHEN actual_minutes >= COALESCE(${patch.endMin ?? null}::int, end_min) - COALESCE(${patch.startMin ?? null}::int, start_min) THEN 'completed' ELSE 'partial' END
@@ -379,9 +379,10 @@ export const neonStore: Store = {
               OR ${has("projectId")} AND project_id IS DISTINCT FROM ${patch.projectId ?? null}
               OR ${patch.kind !== undefined} AND kind IS DISTINCT FROM ${patch.kind ?? null})
              OR actual_minutes = 0 AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${eventId}))
-        RETURNING id`,
-      sql`UPDATE event_series SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1))
-        WHERE id = (SELECT series_id FROM events WHERE id = ${eventId} AND user_id = ${USER_ID})`,
+        RETURNING id, series_id),
+      bumped AS (UPDATE event_series SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1))
+        WHERE id IN (SELECT series_id FROM updated WHERE series_id IS NOT NULL) RETURNING id)
+      SELECT id FROM updated`,
     ])
     if (!result[1].length) throw new RequestError("The block changed while saving. Refresh and try again.", 409)
     return load()

@@ -63,17 +63,20 @@ export interface CategoryStat {
 export function categoryStats(data: WeekData): CategoryStat[] {
   const done = data.projects.filter((p) => p.completedDate)
   const groups = new Map<string, CategoryStat>()
-  const add = (key: string, course: string | null, type: Project["type"] | null, p: Project) => {
+  const add = (key: string, course: string | null, type: Project["type"] | null, p: Project, actual: number) => {
     const g = groups.get(key) ?? { key, course, type, planned: 0, actual: 0, multiplier: 1, samples: 0 }
     g.planned += p.targetMinutes
-    g.actual += projectLogged(p.id, data.tasks, data.logs, data.events)
+    g.actual += actual
     g.samples += 1
     g.multiplier = g.actual / g.planned
     groups.set(key, g)
   }
   for (const p of done) {
-    add(`${p.course}|${p.type}`, p.course, p.type, p)
-    add(`*|${p.type}`, null, p.type, p)
+    // Finished without logging anything says nothing about how long the work takes.
+    const actual = projectLogged(p.id, data.tasks, data.logs, data.events)
+    if (actual <= 0) continue
+    add(`${p.course}|${p.type}`, p.course, p.type, p, actual)
+    add(`*|${p.type}`, null, p.type, p, actual)
   }
   return [...groups.values()]
 }
@@ -120,7 +123,7 @@ export function estimateProject(project: Project, data: WeekData, stats = catego
       explanation: `${p}% done after ${formatDuration(logged)} — at that pace about ${formatDuration(remaining)} to go.`,
     }
   }
-  if (category && category.samples > 0) {
+  if (category && category.samples > 0 && category.multiplier > 0) {
     const total = Math.round((project.targetMinutes * category.multiplier) / 5) * 5
     const pct = Math.round((category.multiplier - 1) * 100)
     return {
@@ -283,7 +286,7 @@ export interface BacktrackStats {
 
 export function backtrack(data: WeekData, today: string): BacktrackStats {
   const from = addDays(today, -WINDOW_BACK)
-  const past = data.events.filter((e) => e.kind === "work" && e.date >= from && isPast(e, today))
+  const past = data.events.filter((e) => e.kind === "work" && e.date >= from && e.date <= today && isPast(e, today))
   const len = (e: CalendarEvent) => e.endMin - e.startMin
   const byTimeOfDay: BacktrackStats["byTimeOfDay"] = {
     morning: { planned: 0, actual: 0, skipped: 0, blocks: 0 },
@@ -407,7 +410,8 @@ export function rhythmBins(list: Session[], data: WeekData, by: RhythmGroupBy) {
   for (const s of list) {
     const g = groupKey(s.projectId, data, by)
     const entry = legend.get(g.key) ?? { ...g, minutes: 0 }
-    entry.minutes += s.minutes
+    // Match the bars, which stop at midnight.
+    entry.minutes += s.end - s.start
     legend.set(g.key, entry)
     for (let t = s.start; t < s.end; ) {
       const slot = Math.floor(t / 30)

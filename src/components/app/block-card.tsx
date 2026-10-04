@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowRightLeft, Check, CircleDashed, Coffee, Moon, Sparkles } from "lucide-react"
+import { displayedPercent } from "@/lib/analytics"
 import { formatClock, formatDuration, formatRange, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -27,6 +28,7 @@ export function BlockCard({
 }) {
   const project = data.projects.find((p) => p.id === event.projectId)
   const color = project?.color ?? "#A8A29E"
+  const percent = project ? displayedPercent(project, data) : 0
   const planned = event.endMin - event.startMin
   const status = isNow && event.status === "planned" ? null : STATUS_META[event.status]
   const Icon = event.kind === "life" ? Coffee : null
@@ -97,10 +99,12 @@ export function BlockCard({
           <PlannedVsActual planned={planned} actual={event.actualMinutes} color={color} />
           {project && !isPast && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {project.progressPercent !== null && <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full" style={{ width: `${project.progressPercent}%`, backgroundColor: color }} />
-              </div>}
-              <span className="tabular-nums">{project.progressPercent !== null ? `${project.progressPercent}% of assignment` : "Report assignment progress"}</span>
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: color }} />
+              </div>
+              <span className="tabular-nums">
+                {percent}% of assignment{project.progressPercent == null && " · estimated"}
+              </span>
             </div>
           )}
         </div>

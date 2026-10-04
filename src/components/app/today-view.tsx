@@ -26,7 +26,7 @@ export function TodayView() {
     <div className="space-y-5">
       <DayStrip data={data} dates={dates} today={today} selected={day} onSelect={setSelectedDay} />
       <DayTimeline data={data} date={day} today={today} nowMinute={now.minute} onOpen={openBlock} onAddGap={setDraft} />
-      {data.settings.checkInEnabled && day <= today && <CheckInCard date={day} />}
+      {data.settings.checkInEnabled && day <= today && <CheckInCard key={day} date={day} />}
     </div>
   )
   const rail = <ProjectRail data={data} today={today} onEdit={editProject} />

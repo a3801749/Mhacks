@@ -14,8 +14,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/projects/[
   const patch: ProjectPatch = {}
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim().slice(0, 80)
   if (typeof body.course === "string" && body.course.trim()) patch.course = body.course.trim().slice(0, 40)
-  if (body.type && body.type in ASSIGNMENT_TYPES) patch.type = body.type
-  if (body.priority && body.priority in PRIORITIES) patch.priority = body.priority
+  if (body.type && Object.hasOwn(ASSIGNMENT_TYPES, body.type)) patch.type = body.type
+  if (body.priority && Object.hasOwn(PRIORITIES, body.priority)) patch.priority = body.priority
   if (typeof body.notes === "string") patch.notes = body.notes.slice(0, 2000)
   if (typeof body.pinned === "boolean") patch.pinned = body.pinned
   if (body.targetMinutes !== undefined) {
