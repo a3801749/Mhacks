@@ -146,7 +146,7 @@ test("only the requested create is filled, at the user's requested date and time
   const result = withRequestedEvent(changes, request)
   assert.equal(result[0].date, wednesday)
   assert.equal(result[0].startMin, 1200)
-  assert.equal(result[0].endMin, 1290)
+  assert.equal(result[0].endMin, 1260)
   assert.deepEqual(result[1], changes[1])
   assert.equal(sanitizeScheduleChanges(result, week(), { date: today, minute: 600 }).length, 1)
 })

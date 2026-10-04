@@ -12,7 +12,8 @@ import {
 } from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { sanitizeScheduleChanges } from "../schedule-validation"
-import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, scheduleClarification, speakTime, withRequestedEvent } from "./fallback"
+import { mockAdjust, mockReflect, parseScheduleRequest, scheduleClarification } from "./fallback"
+import { adjustmentChanges } from "./adjustment"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
 import {
@@ -71,6 +72,7 @@ export async function adjustSchedule(
 ): Promise<AdjustResponse> {
   const clarification = scheduleClarification(message, history, now.date)
   if (clarification) return { reply: clarification, changes: [], source: "mock" }
+  const request = parseScheduleRequest(message, history, now.date)
   if (geminiEnabled()) {
     try {
       const out = await generateJson<{ reply: string; changes: ScheduleChange[] }>(
@@ -85,23 +87,13 @@ export async function adjustSchedule(
         },
         ADJUST_RESPONSE_SCHEMA,
       )
-      const request = parseScheduleRequest(message, history, now.date)
-      let changes = sanitizeScheduleChanges(withRequestedEvent(out.changes ?? [], request), data, now)
-      let reply = out.reply
-      if (request) {
-        const room = makeRoom(data, changes, now)
-        changes = sanitizeScheduleChanges([...changes, ...room], data, now)
-        const added = changes.filter((c) => room.some((m) => m.eventId === c.eventId))
-          .map((c) => `${data.events.find((e) => e.id === c.eventId)?.title} to ${speakTime(c.date!, c.startMin!, now.date)}`)
-        if (added.length) reply = `${reply} To make room, I'd slide ${added.join(" and ")}.`
-      }
-      return { reply, changes, source: "gemini" }
+      return { reply: out.reply, changes: adjustmentChanges(out.changes, data, request, now), source: "gemini" }
     } catch (err) {
       console.error("[gemini] adjust failed, using fallback:", err)
     }
   }
   const fallback = mockAdjust(data, message, history, now)
-  return { ...fallback, changes: sanitizeScheduleChanges(fallback.changes, data, now) }
+  return { ...fallback, changes: adjustmentChanges(fallback.changes, data, request, now) }
 }
 
 export async function reflect(data: WeekData, today: string, minute = 0): Promise<Reflection> {

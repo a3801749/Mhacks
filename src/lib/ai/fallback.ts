@@ -95,6 +95,13 @@ function requestsEvent(message: string) {
     (SCHEDULE_VERBS.test(message) || WANTS_EVENT.test(message) && PLANS.test(message))
 }
 
+function requestedDuration(text: string) {
+  const match = text.match(/\bfor\s+(a|an|one|two|three|\d+(?:\.\d+)?)\s*(hours?|hrs?|minutes?|mins?)\b/i)
+  if (!match) return null
+  const words: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3 }
+  return Math.round((words[match[1].toLowerCase()] ?? Number(match[1])) * (/^(hour|hr)/i.test(match[2]) ? 60 : 1))
+}
+
 /** Keep an incomplete event request separate from a request to rearrange existing work. */
 export function readScheduleRequest(message: string, history: ChatTurn[], today: string): {
   title: string; date: string; startMin: number | null; endMin: number | null
@@ -114,17 +121,19 @@ export function readScheduleRequest(message: string, history: ChatTurn[], today:
   const named = said.map((t) => t.match(PLANS)).find(Boolean)
   const title = named ? named[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bWith\b/, "with") : "New event"
   let startMin = clockMinute(message) ?? (!direct ? clockMinute(source) : null)
+  let duration = requestedDuration(message) ?? requestedDuration(source) ?? 60
   if (startMin == null && named) {
     // Repeating the same request can retain the user's own time, never an agent's invented time.
     for (const turn of [...history].reverse().filter((t) => t.role === "user" && requestsEvent(t.text))) {
       const prior = readScheduleRequest(turn.text, [], today)
       if (prior?.title.toLowerCase() === title.toLowerCase() && prior.date === date && prior.startMin != null) {
         startMin = prior.startMin
+        duration = requestedDuration(message) ?? prior.endMin! - prior.startMin
         break
       }
     }
   }
-  return { title, date, startMin, endMin: startMin == null ? null : Math.min(1440, startMin + 60) }
+  return { title, date, startMin, endMin: startMin == null ? null : Math.min(1440, startMin + duration) }
 }
 
 export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
@@ -146,13 +155,16 @@ export function withRequestedEvent(changes: ScheduleChange[], request: ReturnTyp
   if (index < 0) index = changes.findIndex((c) => c.action === "create" && !c.taskId && c.kind !== "work" &&
     (!c.title || c.date === request.date && c.startMin === request.startMin))
   const c: ScheduleChange = index < 0 ? { action: "create", reason: "You asked for it." } : changes[index]
-  const duration = Number.isInteger(c.startMin) && Number.isInteger(c.endMin) && c.endMin! > c.startMin!
-    ? c.endMin! - c.startMin! : c.endMin != null && c.endMin > request.startMin ? c.endMin - request.startMin : request.endMin - request.startMin
   const filled: ScheduleChange = {
     ...c, kind: c.kind ?? (c.taskId ? "work" : "life"),
     title: titleMatches(c) || request.title === "New event" ? c.title || request.title : request.title,
-    date: request.date, startMin: request.startMin, endMin: Math.min(1440, request.startMin + duration),
+    date: request.date, startMin: request.startMin, endMin: request.endMin,
     reason: c.reason || "You asked for it.",
+  }
+  if (PLANS.test(request.title) || filled.kind === "life") {
+    filled.kind = "life"
+    delete filled.taskId
+    delete filled.projectId
   }
   return index < 0 ? [filled, ...changes] : changes.map((change, i) => i === index ? filled : change)
 }
