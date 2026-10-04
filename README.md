@@ -56,6 +56,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 - [`docs/demo-walkthrough.md`](docs/demo-walkthrough.md): a step-by-step demo script covering every feature
 - [`docs/onboarding.md`](docs/onboarding.md): the onboarding flow (live at `/welcome`) and the reasoning behind it
 - [`docs/planning-changes.md`](docs/planning-changes.md): changes from the planning review, verification actions, and current limits
+- [`docs/product-readiness-review.md`](docs/product-readiness-review.md): incoming commit coverage, necessary corrections, verification, and remaining limits
 - [`docs/screen-time-extension.md`](docs/screen-time-extension.md): how to build the screen-time browser extension
 
 ## Team handoff notes
