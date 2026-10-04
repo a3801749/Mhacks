@@ -34,13 +34,15 @@ onboarding, clear the flag first: in the browser console, run `localStorage.remo
 ### 4. Tilly (40s)
 
 - Click **Talk to Tilly** → "I'm ordering pizza instead" (speak it if you're in Chrome).
-- She proposes a move to a time you historically follow through on → **Sounds good** → **Undo** to show it's safe.
+- She proposes a move to a time you historically follow through on → the check-mark button (**Apply this change**) → **Undo this change** to restore it.
+- Try "schedule dinner with Sam at 8pm Wednesday". Review the affected-day preview and apply or leave out each proposed change separately.
 - Switch to **Tide** mode and say "I'm not doing this right now, move it". This time it applies on its own.
 
 ### 5. Plan (30s) — `/plan`
 
 - Drag out ~4 hours on tomorrow's column.
-- Show manual creation first, then open **Tilly’s suggestions**. Tilly splits it: hardest and most urgent work first, then a lighter reading, with breaks. Remove one, then add the rest.
+- Show the manual form first, then open **Tilly’s suggestions**. Tilly splits it: hardest and most urgent work first, then a lighter reading, with breaks. Add one suggestion, remove another, then add the rest.
+- Close the dialog and use the previous/next week arrows. **Add a block** starts in the week being viewed.
 
 ### 6. Analytics (30s) — `/rhythm`
 
@@ -55,6 +57,7 @@ onboarding, clear the flag first: in the browser console, run `localStorage.remo
 
 ### 8. Personal events (30s) — `/agenda`
 
+- **New course** saves a course and color on its own. Enable **Add class times (lecture, section, lab)** to add weekly meetings through the last day of class.
 - Use **Schedule event** → **Event**. Add a title, location, meeting link, and notes.
 - Enable **Repeats** and choose a custom weekday pattern and ending.
 - Open an occurrence → **Edit block**. Show this/following/all editing and deletion scopes.
