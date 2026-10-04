@@ -33,8 +33,8 @@ import { CourseField } from "./course-field"
 import { ScreenTimePreview } from "./screen-time-preview"
 import { TillyOrb } from "./voice-agent"
 
-export const ONBOARDED_KEY = "andy:onboarded"
-const REPLAY_WELCOME = "andy:replay-welcome"
+export const ONBOARDED_KEY = "tilly:onboarded"
+const REPLAY_WELCOME = "tilly:replay-welcome"
 
 const STEPS = ["Welcome", "Guidance", "Extras", "First assignment", "Tour"] as const
 const MODE_ICONS = { anchor: Anchor, coach: Lighthouse, autopilot: Waves }

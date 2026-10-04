@@ -1,5 +1,5 @@
-// Working name until the team picks one. Rename here and it updates everywhere.
-export const APP_NAME = "Andy"
+// Rename here and it updates everywhere.
+export const APP_NAME = "Tilly"
 export const APP_TAGLINE = "A calendar that looks back before it plans ahead."
 
 export const AGENT_NAME = "Tilly"

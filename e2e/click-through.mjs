@@ -9,10 +9,10 @@ import { mkdir, writeFile } from "node:fs/promises"
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:4317"
 const PAGES = ["/", "/agenda", "/plan", "/rhythm", "/timeline", "/welcome"]
-const OUT = "/tmp/andy-e2e"
+const OUT = "/tmp/tilly-e2e"
 
 const IGNORE_CONSOLE = /Download the React DevTools|hydration|favicon|Grammarly|data-gr-/i
-const SKIP_NAME = /^(Andy|Today|Agenda|Plan|Analytics|Timeline)$/
+const SKIP_NAME = /^(Tilly|Today|Agenda|Plan|Analytics|Timeline)$/
 
 const issues = []
 function issue(kind, detail) {

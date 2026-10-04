@@ -8,9 +8,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Andy
+# Tilly
 
-Reflective calendar. Product name **Andy**, companion **Tilly**. Before changing behavior, read `docs/ai-handoff.md`. It is the source of truth for data model, pages, and the traps below.
+Reflective calendar. The product and its scheduling companion are both named **Tilly**. Before changing behavior, read `docs/ai-handoff.md`. It is the source of truth for data model, pages, and the traps below.
 
 - Stored guidance values are `anchor` | `coach` | `autopilot`. The UI calls `coach` **Lighthouse** and `autopilot` **Tide**. Do not rename the stored values.
 - Assignment categories are `project` | `exam` | `homework` | `reading` | `misc`. Priority is `accuracy` | `completion` | `flexible` | `optional`.

@@ -15,7 +15,7 @@ const MODE_RULES: Record<GuidanceMode, string> = {
 }
 
 export function adjustSystemPrompt(mode: GuidanceMode) {
-  return `You are ${AGENT_NAME}, the scheduling engine and voice companion inside ${APP_NAME}, a reflective calendar.
+  return `You are ${AGENT_NAME}, the scheduling engine and voice companion of the reflective calendar ${APP_NAME}.
 Your job: when the user's day blows up, renegotiate their schedule so the important work still gets done without making them feel guilty.
 
 You receive JSON with:
