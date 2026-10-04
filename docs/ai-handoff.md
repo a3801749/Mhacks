@@ -43,8 +43,8 @@ Priority (`Project.priority`) is how the work is graded, not a 1–5 rank:
 | --- | --- | --- | --- |
 | `/` | Today | `today-view.tsx` | Seven-day strip centered on today, a proportional day timeline, check-in, Looking back. Left rail is an **overview**, not a stack of full cards. |
 | `/agenda` | Agenda | `agenda-view.tsx` | Filterable assignment/event list plus a month calendar shaded by how busy the day is. Schedule from here. |
-| `/plan` | Plan | `planner-view.tsx` | Week grid. Drag a block (tap on touch) and Tilly suggests a breakdown. |
-| `/rhythm` | Rhythm | `rhythm-view.tsx` | Midnight-to-midnight histogram of logged work, week or month, grouped by assignment, course, or category. |
+| `/plan` | Plan | `planner-view.tsx` | Your Week. Create manually, move blocks, resize, or explicitly open optional Tilly suggestions. |
+| `/rhythm` | Analytics | `rhythm-view.tsx` | Midnight-to-midnight histogram of logged work, week or month, grouped by assignment, course, or category. |
 | `/timeline` | Timeline | `timeline-view.tsx` | Gantt from assigned date to due date. Fill starts the day work actually began. |
 | `/welcome` | (linked, not in nav) | `onboarding-view.tsx` | Five steps: Welcome, Guidance, Extras, First assignment, Tour of all five views. Settings saves must succeed before advancing. |
 
@@ -59,7 +59,7 @@ Shell, nav, "New assignment" button, Tilly button, and the dialogs live in `src/
 3. **Due soon** — the next few unpinned assignments by due date.
 4. One line when pin history is strong enough: "You pin {course} {category} most…"
 
-The rail has a fixed height on desktop; each section scrolls on its own (`scrollArea` in `project-rail.tsx`, with a stable scrollbar gutter). Do not put a scroll on the whole column.
+The rail has a fixed height on desktop; each section scrolls on its own (`ScrollArea` in `project-rail.tsx`, with a permanently mounted custom scrollbar and a separate content gutter). Do not put a scroll on the whole column.
 
 No estimate paragraphs on these rows. Pace is a short tag: **Done**, **Ahead**, **On pace**, **Behind pace** (`PACE_COPY` in `assignment-bits.tsx`). Progress is a plain bar (`ProgressBar`), not the old animated wave.
 
@@ -68,8 +68,9 @@ Creating an assignment is the **New assignment** button in the header (top right
 ## Today body
 
 - `DayStrip` has no progress bars. Day progress (actual ÷ planned work) is a small bar at the bottom right of the day header in `DayTimeline`. The summary sentence has no trailing period.
-- The timeline is proportional: card height is `max(84px, minutes × 1.1px)`, and gaps scale too. Gaps of 30 minutes or more say "Xh of breathing room". Hovering a gap of 15 minutes or more (today after now, or a future day) shows "Add something here", which opens `ScheduleDialog` prefilled with that slot.
-- Every work block shows the planned bar even when nothing has been logged.
+- The timeline is proportional: card height is `max(84px, minutes × 1.1px)`, and gaps scale too. Gaps of 30 minutes or more say "Xh of breathing room". Addable gaps show a centered “Add something here” button. The trailing gap is addable too. Only slots with at least 15 minutes after the current time are offered. Gaps use the furthest preceding card end, so nested/overlapping and skipped cards do not create false spacing.
+- Every work block shows scheduled-vs-actual time, even before logging. The other bar is total reported assignment progress, never logged time divided by a task estimate. Personal events have no focused-time progress bar.
+- Day-strip and Plan booked totals include both focus blocks and personal events, excluding skipped items. A restored personal event therefore contributes again.
 
 ## Block dialog
 
@@ -79,12 +80,14 @@ Creating an assignment is the **New assignment** button in the header (top right
 - Removals are stored as negative `time_logs` rows, so totals stay a plain sum.
 - The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference. Edits and deletions that would make the total negative are rejected: adjust later removal entries first. Neon updates the block and its ledger atomically.
 - Marking a task done shows a highlighted "how far along is the assignment now?" slider when the block belongs to an unfinished assignment.
-- Blocks do not need an assignment. A work block with no task can still log time (no `time_logs` row, since logs need a task) and has a "Mark done" button.
+- **Edit block** opens the shared `BlockForm`: title, date, start/end, notes, optional assignment/task when no work is recorded. Resizing/restoring logged blocks derives status from their existing actual time; logs are unchanged. The assignment’s due date and estimate are reached through **Edit assignment**.
+- Total assignment progress is editable for any linked focus block, including completed assignments (saving below 100% explicitly reopens one). Scheduled duration is not an estimate. Legacy task estimates remain internal planner data.
+- Blocks do not need an assignment or task. A work block with no task can still log time (no `time_logs` row, since logs need a task) and has a "Mark done" button. If it belongs to an assignment, `projectLogged` includes that block’s actual total alongside task ledger totals without double-counting. Task-less logging has no per-entry notes/trail.
 - `estimateProject` returns `uncertain: true` when progress is 0% but at least 2 hours are logged. The UI shows the "can't give an accurate estimate yet" sentence instead of a number.
 
 ## Looking back
 
-`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount and after calendar, progress, or settings changes. `insights.ts` caches by date and calendar snapshot so desktop and mobile copies share one request. Superseded responses are ignored. Refresh requests a fresh reflection; the client sends its local minute so expired same-day shifts are excluded. There is no "Compile my week" button anymore.
+`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection only when `todayInsightsEnabled` is on. The on-page switch is independent of Plan suggestions and Analytics patterns. Turning it off hides the section and stops new requests, while the charts remain. `insights.ts` caches by date and calendar snapshot so desktop and mobile copies share one request. Superseded responses are ignored. Refresh requests a fresh reflection; the client sends its local minute so expired same-day shifts are excluded. There is no "Compile my week" button anymore.
 
 ## Assignment dialog
 
@@ -97,7 +100,23 @@ No subtitle under the title. Fields: name, course (`CourseField` — free text w
 - Left on desktop, above on mobile: the list. Toggle Assignments / Events. Filter by class and category (multi-select chips). Sort assignments by due date, priority weight, pinned first, least progress, or most time left. "Show finished" includes completed assignments.
 - Right on desktop: month calendar and the selected day's events and due items.
 - Day color is `dayLoad()` in `src/lib/analytics.ts`. Score = booked minutes (skipped blocks excluded) plus a due-date penalty (`accuracy` 120, `completion` 60, `flexible` 40, `optional` 20; exams ×1.5). Levels: `free` 0, `light` under 300, `medium` under 420, `heavy` otherwise. UI: open / green "Okay" / orange "Busy" / red "Packed" (`BUSY_STYLE`). Dots on a cell are things due that day.
-- **Schedule event** opens `ScheduleDialog`. "Focus block" is `kind: "work"`; with an assignment it is tied to one of its open tasks, without one it just needs a title. "Event" is `kind: "life"` with an optional linked assignment. Both go through `POST /api/schedule/apply` as a `create` change with an explicit `kind`. Overlaps are warned about and still allowed.
+- **Schedule event** opens `ScheduleDialog`. "Focus block" is `kind: "work"`; with an assignment it is tied to one of its open tasks, without one it just needs a title. New “Event” entries are independent `kind: "life"` personal events, with optional location/meeting link/notes. Existing linked life events remain readable. Nonrepeating entries go through `POST /api/schedule/apply` as a `create` change with an explicit `kind`. Overlaps are warned about and still allowed.
+
+## Plan, Analytics, and Timeline controls
+
+- Plan creates through the same `BlockForm` as Today and Agenda. The manual form comes first. `aiPlannerEnabled` controls availability of a collapsed Tilly section; expansion starts the request, closing cancels it, and editing the time window invalidates old suggestions. `/api/plan` rejects disabled suggestions. Grid movement/resizing edits one occurrence at a time, preserves actual time, snaps to 15 minutes, and offers keyboard controls. Overlaps use separate lanes. Bulk series edits are in the detail editor.
+- Analytics keeps the `/rhythm` URL for existing links. It leads with focused time, active days, average per active day, and blocks with logged time. `analyticsPatternsEnabled` hides local heuristic observations independently; no model request is involved. The wind-down rings and explanatory blurbs are removed; axis labels and tooltips retain units.
+- Timeline has no booked-work dots. Due dates can be edited with a date field or the bar’s right handle (arrows = one day, Shift = one week). The axis stays stable during a drag and rescales after save. Due dates cannot precede assigned dates.
+
+## Recurring personal events
+
+`recurrence.ts` owns validation, local-date generation, materialization, and scoped edits/deletion. `BlockForm` and `recurrence-fields.tsx` expose daily/weekly/monthly/yearly rules, 1–99 intervals, custom weekdays, monthly date or first/second/third/fourth/fifth/last weekday, and never/until/count endings. Missing month dates and non-leap February 29 are skipped. Count is 1–1000 and includes cancelled/moved exceptions.
+
+`EventSeries` holds the template, rule, original start, `stopBefore`, and exclusions. `CalendarEvent.occurrenceDate` is the original recurrence identity even after a move; `isException` protects individual edits. Series changes preserve past/completed work and exceptions. Following edits split the definition, preserving the remaining count. All edits create a fresh generation ID to avoid collisions with preserved history. Exceptions still consume the count when the new pattern no longer lands on their date. Reducing a count does not delete preserved history or individual exceptions.
+
+Deletion offers this/following/all, records exclusions/cutoffs, and rejects recorded time. Creation can atomically convert an unworked personal event. Generation starts with a rolling year and extends when Agenda browses farther (up to five years ahead); never-ending rules stay saved beyond that display horizon. Existing occurrences always win, preventing duplicates after skip/move/delete. Calendar times remain local wall-clock minutes through DST. This is native recurrence, not Google sync or an RFC 5545 import/export engine.
+
+Neon stores definitions in `event_series.definition` JSONB. Occurrence uniqueness is `(series_id, occurrence_date)`. Loads use a consistent read transaction; expansion and series mutation share a calendar advisory lock. A definition revision changes when an occurrence is edited, so a stale bulk edit returns 409 instead of overwriting it. Series updates/deletions and occurrence replacement are atomic, with removed rows locked and checked. Generation/insertion is batched to avoid a request per occurrence. These SQL paths need a configured Neon database for live integration testing.
 
 ## Data model
 
@@ -107,7 +126,7 @@ Types: `src/lib/types.ts`. SQL: `db/schema.sql`. The app applies the SQL itself 
 
 A newly pinned assignment goes to the end of the pinned list (`pin_order` = max + 1). `pin_count` increments only on the transition from unpinned to pinned (memory store and the Neon `UPDATE`). Un-pinning does not decrement it. That history is what the planner learns from, so do not reset it when the user unpins.
 
-`events`: `date` is `YYYY-MM-DD`, `start_min` / `end_min` are minutes from local midnight. This is timezone-agnostic on purpose. `actual_minutes` is what was logged. `kind` is `work` or `life`. `moved_from_*` records the first time a block was moved.
+`events`: `date` is `YYYY-MM-DD`, `start_min` / `end_min` are minutes from local midnight. This is timezone-agnostic on purpose. `actual_minutes` is what was logged. `kind` is `work` or `life`. `moved_from_*` records the first move. Event details are `location`, `meeting_url`, and `notes`. Recurrence fields are `series_id`, `occurrence_date`, and `is_exception`; `event_series` stores definitions. New columns have idempotent upgrades. `WeekData` also returns `series`.
 
 `time_logs` stores signed entries that can be edited or deleted. Their sum must stay consistent with the linked block's actual time. `check_ins` is one row per user per date, rating 1–10.
 
@@ -146,12 +165,14 @@ ElevenLabs: `POST /api/tts`. Returns 501 without a key; the client uses `speechS
 
 `getStore()` (`src/lib/store/index.ts`) uses Neon when `DATABASE_URL` is set, otherwise the in-memory store on `globalThis.__calendarMemory`. The memory store is per server process and is replaced by `reset`. Both stores implement `src/lib/store/types.ts`. A new field has to be added in **both** stores, the seed, and the SQL.
 
-Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI immediately, then PATCHes.
+Client mutations go through `src/hooks/use-week.ts` and are serialized; stale loads cannot overwrite a newer mutation. `togglePin` updates the UI immediately, then PATCHes.
 
 | Route | Method | Body / behavior |
 | --- | --- | --- |
-| `/api/week?today=` | GET | Full `WeekData` plus integration flags |
-| `/api/events/:id` | PATCH / DELETE | Update status, date, startMin, endMin, or move history; delete an unworked block for Undo |
+| `/api/week?today=` | GET | Full `WeekData` plus integration flags; optional `through` extends recurrence generation |
+| `/api/events/:id` | PATCH / DELETE | Edit title, status, date, duration, details, safe associations, or move history; delete an unworked block for Undo |
+| `/api/event-series` | POST | Create series or convert one unworked personal event |
+| `/api/events/:id/series` | PATCH / DELETE | Scoped series edit or this/following/all deletion |
 | `/api/events/:id/log` | POST | `{ minutes, note }` — ±1 to 720; negative takes time off. Updates `actual_minutes` and appends a time log |
 | `/api/logs/:id` | PATCH / DELETE | Edit `{ minutes, note }` or remove a trail entry; the event's actual time follows |
 | `/api/projects/pin-order` | PUT | `{ ids }` in display order |
@@ -159,11 +180,11 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | `/api/projects` | POST | create assignment + first task |
 | `/api/projects/:id` | PATCH | name, course, type, priority, notes, pinned, dates, target, progress, completedDate |
 | `/api/checkins` | PUT | `{ date, rating, note }` upsert |
-| `/api/plan` | POST | `{ date, startMin, endMin }` → breakdown |
+| `/api/plan` | POST | `{ date, startMin, endMin, today }` → breakdown (403 when disabled) |
 | `/api/schedule/adjust` | POST | `{ message, history, now }` |
 | `/api/schedule/apply` | POST | `{ changes }` |
-| `/api/reflect` | POST | reflection for `{ today, minute }` (client-local time) |
-| `/api/settings` | PUT | partial settings. **`screenTimeEnabled` is forced `false`.** |
+| `/api/reflect` | POST | reflection for `{ today, minute }` (client-local time); 403 when Today insights are off |
+| `/api/settings` | PUT | partial settings, including `todayInsightsEnabled` and `analyticsPatternsEnabled`. **`screenTimeEnabled` is forced `false`.** |
 | `/api/tts` | POST | `{ text }` → audio/mpeg, or 501 |
 | `/api/reset` | POST | rebuild the demo week |
 
@@ -191,6 +212,7 @@ Not built. Settings cannot turn it on (`screenTimeEnabled: false` in the setting
 
 - `docs/onboarding.md` — why `/welcome` is shaped the way it is
 - `docs/demo-walkthrough.md` — click path for a demo
+- `docs/planning-changes.md` — planning-review changes, verification actions, and tradeoffs
 - `docs/screen-time-extension.md` — future extension
 
 ## Running and checking

@@ -19,9 +19,9 @@ Target time: under a minute. Every step can be skipped.
 | --- | --- | --- | --- |
 | 0 | **Welcome** | Reads three value props: look back first, blocks that know your tasks, Tilly renegotiates | — |
 | 1 | **Guidance** | Picks Anchor / Lighthouse / Tide, each with an example of what Tilly would say | `settings.guidanceMode` |
-| 2 | **Extras** | Toggles the daily check-in and the AI planner. Sees a live preview of each. Screen time is shown as "coming soon" with sample data | `settings.checkInEnabled`, `settings.aiPlannerEnabled` |
+| 2 | **Extras** | Toggles the daily check-in and optional Tilly planner suggestions. Sees a live preview of each. Screen time is shown as "coming soon" with sample data | `settings.checkInEnabled`, `settings.aiPlannerEnabled` |
 | 3 | **First assignment** | Adds one assignment with course + type + guess + due date, or skips to the demo data | New project + first task |
-| 4 | **Tour** | Five cards (Today, Agenda, Plan, Rhythm, Timeline) with what each is and how to use it, plus a Tilly card. Each card opens that page | `localStorage["andy:onboarded"]` |
+| 4 | **Tour** | Five cards (Today, Agenda, Plan, Analytics, Timeline) with what each is and how to use it, plus a Tilly card. Each card opens that page | `localStorage["andy:onboarded"]` |
 
 ### Design notes
 
@@ -38,7 +38,7 @@ Target time: under a minute. Every step can be skipped.
 ## Ideas for later
 
 - **Import from Canvas / Google Calendar** at step 3 instead of typing assignments. This is the biggest friction cut.
-- **Ask for typical hours** ("When do you usually work?") to seed the Rhythm view before there's history.
+- **Ask for typical hours** ("When do you usually work?") to seed the Analytics view before there's history.
 - **A sample week mode**: let people try Tilly on demo data before connecting anything (already true today, since
   the demo week is always loaded).
 - **Screen time pairing** as a step 2 action once the extension exists (see `screen-time-extension.md`).
