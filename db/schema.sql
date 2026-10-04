@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
                       CHECK (guidance_mode IN ('anchor', 'coach', 'autopilot')),
   check_in_enabled    BOOLEAN NOT NULL DEFAULT true,
   ai_planner_enabled  BOOLEAN NOT NULL DEFAULT true,
+  today_insights_enabled BOOLEAN NOT NULL DEFAULT true,
+  analytics_patterns_enabled BOOLEAN NOT NULL DEFAULT true,
   screen_time_enabled BOOLEAN NOT NULL DEFAULT false,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -84,6 +86,8 @@ CREATE TABLE IF NOT EXISTS check_ins (
 -- Upgrades for databases created before these columns existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS check_in_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_planner_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS today_insights_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_patterns_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS screen_time_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS course TEXT NOT NULL DEFAULT 'General';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'project';

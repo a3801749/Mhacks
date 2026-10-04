@@ -94,11 +94,13 @@ export function SettingsDialog({
             onChange={(v) => api.updateSettings({ checkInEnabled: v })}
           />
           <FeatureToggle
-            label="AI planner suggestions"
-            description={`When you drag out a block on the Plan page, ${AGENT_NAME} suggests how to split it across your tasks.`}
+            label="Tilly planner suggestions"
+            description={`Enable the optional ${AGENT_NAME} suggestions section below manual creation on the Plan page.`}
             checked={data.settings.aiPlannerEnabled}
             onChange={(v) => api.updateSettings({ aiPlannerEnabled: v })}
           />
+          <FeatureToggle label="Today insights" description="Show Tilly’s observations and suggested shifts alongside Looking back." checked={data.settings.todayInsightsEnabled} onChange={(v) => api.updateSettings({ todayInsightsEnabled: v })} />
+          <FeatureToggle label="Analytics patterns" description="Show observations calculated from your time logs. These do not use a model." checked={data.settings.analyticsPatternsEnabled} onChange={(v) => api.updateSettings({ analyticsPatternsEnabled: v })} />
           <FeatureToggle
             label="Screen time insights"
             description="See how much of a study block went to scrolling. Needs the browser extension — coming soon."

@@ -18,6 +18,8 @@ export async function PUT(req: NextRequest) {
       guidanceMode: body.guidanceMode ?? settings.guidanceMode,
       checkInEnabled: bool(body.checkInEnabled, settings.checkInEnabled),
       aiPlannerEnabled: bool(body.aiPlannerEnabled, settings.aiPlannerEnabled),
+      todayInsightsEnabled: bool(body.todayInsightsEnabled, settings.todayInsightsEnabled),
+      analyticsPatternsEnabled: bool(body.analyticsPatternsEnabled, settings.analyticsPatternsEnabled),
       screenTimeEnabled: false,
     })
   })

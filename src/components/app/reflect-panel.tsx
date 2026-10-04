@@ -12,6 +12,8 @@ import type { Reflection, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { request, type WeekApi } from "@/hooks/use-week"
 
+import { PreferenceSwitch } from "./preference-switch"
+
 interface InsightResult {
   key: string
   version: number
@@ -46,6 +48,7 @@ export function ReflectPanel({
   const maxDay = Math.max(1, ...stats.byDay.map((d) => Math.max(d.planned, d.actual)))
 
   useEffect(() => {
+    if (!data.settings.todayInsightsEnabled) return
     let active = true
     const fresh = version !== lastRefresh.current
     lastRefresh.current = version
@@ -58,14 +61,14 @@ export function ReflectPanel({
       },
     )
     return () => { active = false }
-  }, [key, today, version])
+  }, [key, today, version, data.settings.todayInsightsEnabled])
 
   const refresh = () => setVersion((value) => value + 1)
 
   return (
     <section className={cn("space-y-4", className)} aria-labelledby="reflect-heading">
       <div className="flex items-baseline justify-between">
-        <h2 id="reflect-heading" className="font-heading text-lg font-medium">
+        <h2 id="reflect-heading" className="font-heading text-2xl font-medium tracking-tight">
           Looking back
         </h2>
         <span className="text-xs text-muted-foreground">
@@ -114,8 +117,10 @@ export function ReflectPanel({
         </div>
       </div>
 
+      <PreferenceSwitch setting="todayInsightsEnabled">Show Tilly insights</PreferenceSwitch>
+      {data.settings.todayInsightsEnabled && <>
       <div className="flex items-center justify-between pt-1">
-        <h2 id="insights-heading" className="font-heading text-lg font-medium">
+        <h2 id="insights-heading" className="font-heading text-2xl font-medium tracking-tight">
           Insights
         </h2>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading} aria-label="Refresh insights">
@@ -232,6 +237,7 @@ export function ReflectPanel({
           </p>
         </div>
       )}
+      </>}
     </section>
   )
 }

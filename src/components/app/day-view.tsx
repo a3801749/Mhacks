@@ -3,13 +3,13 @@
 import { CalendarPlus, Plus, Sun } from "lucide-react"
 import { formatClock, formatDuration, monthDay, weekdayLong, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, WeekData } from "@/lib/types"
+import { addableSlot, bookedMinutes, gapBefore } from "@/lib/day-layout"
 import { cn } from "@/lib/utils"
 import { BlockCard } from "./block-card"
 
 /** Vertical scale for the day timeline, so a 2h block reads as twice a 1h block. */
 const PX_PER_MIN = 1.1
 const MIN_CARD_PX = 84
-const MIN_GAP_TO_ADD = 15
 
 export function DayStrip({
   data,
@@ -27,9 +27,7 @@ export function DayStrip({
   return (
     <div className="grid grid-cols-7 gap-1.5 sm:gap-2" role="tablist" aria-label="Days">
       {dates.map((date) => {
-        const planned = data.events
-          .filter((e) => e.date === date && e.kind === "work")
-          .reduce((s, e) => s + e.endMin - e.startMin, 0)
+        const planned = bookedMinutes(data.events, date)
         const isToday = date === today
         const isSelected = selected === date
         return (
@@ -49,7 +47,7 @@ export function DayStrip({
             </span>
             <span className="font-heading text-lg leading-none tabular-nums">{Number(date.slice(8))}</span>
             <span className={cn("text-[10px] tabular-nums", !isSelected && "text-muted-foreground")}>
-              {planned ? formatDuration(planned) : "free"}
+              {planned ? formatDuration(planned) : "open"}
             </span>
           </button>
         )
@@ -75,14 +73,14 @@ export function DayTimeline({
 }) {
   const events = data.events.filter((e) => e.date === date).sort((a, b) => a.startMin - b.startMin)
   const work = events.filter((e) => e.kind === "work")
-  const planned = work.reduce((s, e) => s + e.endMin - e.startMin, 0)
+  const planned = work.filter((e) => e.status !== "skipped").reduce((s, e) => s + e.endMin - e.startMin, 0)
   const actual = work.reduce((s, e) => s + e.actualMinutes, 0)
   const isPastDay = date < today
   const isToday = date === today
   const canAdd = Boolean(onAddGap) && !isPastDay
 
   let summary: string
-  if (work.length === 0) summary = "Nothing scheduled. A rare open sky"
+  if (!planned && !actual) summary = events.some((e) => e.status !== "skipped") ? `${formatDuration(bookedMinutes(events, date))} booked` : "Nothing scheduled"
   else if (isPastDay) summary = `You planned ${formatDuration(planned)} of work and did ${formatDuration(actual)}`
   else if (isToday) summary = `${formatDuration(actual)} done so far · ${formatDuration(planned)} planned today`
   else summary = `${work.length} work block${work.length === 1 ? "" : "s"} · ${formatDuration(planned)} planned`
@@ -120,12 +118,12 @@ export function DayTimeline({
           <Sun className="size-8 text-amber-400" />
           <p className="mt-3 font-medium">A wide-open day</p>
           <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-            Ask Tilly to pull something forward, or just let it be a rest day.
+            Add a focus block or event, or leave the day open.
           </p>
-          {canAdd && (
+          {canAdd && addableSlot(14 * 60, 1440, isToday ? nowMinute : undefined) && (
             <button
               type="button"
-              onClick={() => onAddGap!({ date, startMin: 14 * 60, endMin: 15 * 60 })}
+              onClick={() => onAddGap!({ date, ...addableSlot(14 * 60, 1440, isToday ? nowMinute : undefined)! })}
               className="mt-4 flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-secondary"
             >
               <Plus className="size-4" /> Add a block
@@ -136,30 +134,17 @@ export function DayTimeline({
         <ol className="relative">
           {events.map((event, i) => {
             const prev = events[i - 1]
-            const gap = prev ? Math.max(0, event.startMin - prev.endMin) : 0
-            const isNow = isToday && nowMinute >= event.startMin && nowMinute < event.endMin
-            const showNowLine = isToday && nowMinute < event.startMin && (!prev || nowMinute >= prev.endMin)
-            const gapAddable = canAdd && prev && gap >= MIN_GAP_TO_ADD && !(isToday && event.startMin <= nowMinute)
+            const frontier = gapBefore(events, i)
+            const gap = prev ? Math.max(0, event.startMin - frontier) : 0
+            const isNow = isToday && event.status !== "skipped" && nowMinute >= event.startMin && nowMinute < event.endMin
+            const showNowLine = isToday && nowMinute < event.startMin && (!prev || nowMinute >= frontier)
+            const slot = prev && canAdd ? addableSlot(frontier, event.startMin, isToday ? nowMinute : undefined) : null
             return (
               <li key={event.id}>
-                {showNowLine && <NowLine minute={nowMinute} />}
-                {prev && !showNowLine && (
-                  <Gap
-                    minutes={gap}
-                    onAdd={
-                      gapAddable
-                        ? () => {
-                            const start = isToday ? Math.max(prev.endMin, Math.ceil(nowMinute / 15) * 15) : prev.endMin
-                            onAddGap!({ date, startMin: start, endMin: Math.min(event.startMin, start + 60) })
-                          }
-                        : undefined
-                    }
-                  />
-                )}
-                {showNowLine && prev && <div className="h-2" />}
+                {prev ? <Gap minutes={gap} onAdd={slot ? () => onAddGap!({ date, ...slot }) : undefined} nowLine={showNowLine ? nowMinute : undefined} /> : showNowLine && <NowLine minute={nowMinute} />}
                 <div
-                  style={{ minHeight: Math.max(MIN_CARD_PX, (event.endMin - event.startMin) * PX_PER_MIN) + 8 }}
-                  className="flex pb-2"
+                  style={{ minHeight: Math.max(MIN_CARD_PX, (event.endMin - event.startMin) * PX_PER_MIN) }}
+                  className="flex"
                 >
                   <BlockCard
                     event={event}
@@ -172,48 +157,33 @@ export function DayTimeline({
               </li>
             )
           })}
-          {isToday && events.every((e) => e.endMin <= nowMinute) && (
-            <li className="pt-2">
-              <NowLine minute={nowMinute} />
-            </li>
-          )}
+          {canAdd && (() => {
+            const frontier = gapBefore(events, events.length)
+            const slot = addableSlot(frontier, 1440, isToday ? nowMinute : undefined)
+            return slot ? <li><Gap minutes={1440 - slot.startMin} onAdd={() => onAddGap!({ date, ...slot })} trailing nowLine={isToday && nowMinute >= frontier ? nowMinute : undefined} /></li> : null
+          })()}
         </ol>
       )}
 
       {!isPastDay && events.length > 0 && (
         <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
           <CalendarPlus className="size-3.5" />
-          Tap a block to log time, hover a gap to add one, or tell Tilly when plans change.
+          Open a block to edit it or log time. Use a gap to add something.
         </p>
       )}
     </section>
   )
 }
 
-function Gap({ minutes, onAdd }: { minutes: number; onAdd?: () => void }) {
-  const height = Math.min(120, Math.max(10, minutes * PX_PER_MIN * 0.45))
-  const label = minutes >= 30 ? `${formatDuration(minutes)} of breathing room` : null
+function Gap({ minutes, onAdd, trailing, nowLine }: { minutes: number; onAdd?: () => void; trailing?: boolean; nowLine?: number }) {
+  const height = Math.min(120, Math.max(onAdd ? 72 : 20, minutes * PX_PER_MIN * 0.45))
   return (
-    <div className="group relative flex items-center" style={{ height }}>
-      {label && (
-        <p className={cn("flex items-center gap-2 pl-3 text-sm text-muted-foreground", onAdd && "group-hover:opacity-0")}>
-          <span className="h-px w-6 bg-border" />
-          {label}
-        </p>
-      )}
-      {onAdd && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center gap-2 py-1 text-sm text-primary opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
-        >
-          <span className="h-px flex-1 bg-primary/30" />
-          <span className="flex items-center gap-1 rounded-md border border-primary/30 bg-card px-2.5 py-1 font-medium">
-            <Plus className="size-3.5" /> {label ? "Add something here" : "Add"}
-          </span>
-          <span className="h-px flex-1 bg-primary/30" />
-        </button>
-      )}
+    <div className="relative flex flex-col items-center justify-center gap-2 py-3" style={{ minHeight: height }}>
+      {nowLine !== undefined && <div className="w-full"><NowLine minute={nowLine} /></div>}
+      {onAdd ? <button type="button" onClick={onAdd} className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-primary hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring">
+        <Plus className="size-3.5" /> Add something here
+      </button> : null}
+      {!trailing && minutes >= 30 && <p className="text-center text-xs text-muted-foreground">{formatDuration(minutes)} of breathing room</p>}
     </div>
   )
 }

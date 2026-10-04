@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Map as MapIcon, X } from "lucide-react"
 import { APP_NAME } from "@/lib/brand"
 import { ONBOARDED_KEY } from "./onboarding-view"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { windowDates } from "@/lib/analytics"
 import { useApp } from "./app-shell"
@@ -41,8 +42,8 @@ export function TodayView() {
           {calendar}
           <ReflectPanel data={data} today={today} api={api} className="xl:hidden" />
         </div>
-        <aside className="hidden xl:sticky xl:top-20 xl:block xl:max-h-[calc(100dvh-6rem)] xl:self-start xl:overflow-y-auto xl:pb-6">
-          <ReflectPanel data={data} today={today} api={api} />
+        <aside className="hidden xl:sticky xl:top-20 xl:block xl:h-[calc(100dvh-6rem)] xl:self-start">
+          <ScrollArea className="h-full"><ReflectPanel data={data} today={today} api={api} className="pb-6" /></ScrollArea>
         </aside>
       </div>
 

@@ -38,7 +38,7 @@ const NAV = [
   { href: "/", label: "Today", icon: Sun },
   { href: "/agenda", label: "Agenda", icon: ListTodo },
   { href: "/plan", label: "Plan", icon: CalendarRange },
-  { href: "/rhythm", label: "Rhythm", icon: Activity },
+  { href: "/rhythm", label: "Analytics", icon: Activity },
   { href: "/timeline", label: "Timeline", icon: GanttChart },
 ]
 

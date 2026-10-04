@@ -69,6 +69,8 @@ export interface Settings {
   guidanceMode: GuidanceMode
   checkInEnabled: boolean
   aiPlannerEnabled: boolean
+  todayInsightsEnabled: boolean
+  analyticsPatternsEnabled: boolean
   screenTimeEnabled: boolean
 }
 

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, GripVertical, Pin, Sparkles } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { AGENT_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
 import { pinPreferenceLabel, pinPreferences, projectHealth, type ProjectHealth } from "@/lib/analytics"
 import { formatDue } from "@/lib/time"
@@ -13,7 +14,7 @@ import { dueText, PaceTag, PinButton, ProgressBar } from "./assignment-bits"
 
 const DUE_SOON = 3
 
-const scrollArea = "min-h-0 overflow-y-auto pr-1.5 [scrollbar-gutter:stable]"
+const scrollArea = "min-h-0"
 
 export function ProjectRail({
   data,
@@ -66,7 +67,7 @@ export function ProjectRail({
         {classes.length === 0 ? (
           <p className="text-sm text-muted-foreground">No open assignments. Add one with “New assignment”.</p>
         ) : (
-          <div className={scrollArea}>
+          <ScrollArea className={scrollArea}>
             <ul className="divide-y rounded-lg border bg-card">
               {classes.map((c) => (
                 <li key={c.course}>
@@ -84,7 +85,7 @@ export function ProjectRail({
                 </li>
               ))}
             </ul>
-          </div>
+          </ScrollArea>
         )}
       </div>
 
@@ -95,22 +96,22 @@ export function ProjectRail({
             Pin the assignments you want front and center. {AGENT_NAME} plans them first.
           </p>
         ) : (
-          <div className={scrollArea}>
+          <ScrollArea className={scrollArea}>
             <PinnedList items={pinned} today={today} onEdit={onEdit} />
-          </div>
+          </ScrollArea>
         )}
       </div>
 
       {soon.length > 0 && (
         <div className="flex min-h-0 flex-col">
           <SectionLabel>Due soon</SectionLabel>
-          <div className={scrollArea}>
+          <ScrollArea className={scrollArea}>
             <ul className="divide-y rounded-lg border bg-card">
               {soon.map((h) => (
                 <AssignmentRow key={h.project.id} h={h} today={today} onEdit={onEdit} />
               ))}
             </ul>
-          </div>
+          </ScrollArea>
         </div>
       )}
 

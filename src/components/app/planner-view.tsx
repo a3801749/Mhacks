@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import { CalendarPlus, MousePointerClick } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { bookedMinutes } from "@/lib/day-layout"
+import { PreferenceSwitch } from "./preference-switch"
 import { addDays, formatClock, formatRange, monthDay, weekdayShort } from "@/lib/time"
 import type { CalendarEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -74,19 +76,22 @@ export function PlannerView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-medium tracking-tight">Plan your week</h1>
+          <h1 className="font-heading text-3xl font-medium tracking-tight">Your Week</h1>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
             <MousePointerClick className="size-4" />
             <span>
               <span className="hidden sm:inline">Drag across a day to block out time</span>
               <span className="sm:hidden">Tap a time to block it out</span>
-              {data.settings.aiPlannerEnabled ? " — Tilly will suggest how to split it across your tasks." : "."}
+              .
             </span>
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-4">
+        <PreferenceSwitch setting="aiPlannerEnabled">Tilly suggestions</PreferenceSwitch>
         <Button onClick={() => setBlock({ date: addDays(today, 1), startMin: 13 * 60, endMin: 17 * 60 })}>
-          <CalendarPlus /> Plan a block
+          <CalendarPlus /> Add a block
         </Button>
+        </div>
       </header>
 
       <div className="overflow-hidden rounded-2xl border bg-card">
@@ -95,8 +100,7 @@ export function PlannerView() {
             <div className="grid grid-cols-[52px_repeat(7,minmax(0,1fr))] border-b">
               <div />
               {days.map((d) => {
-                const work = data.events.filter((e) => e.date === d && e.kind === "work" && e.status !== "skipped")
-                const mins = work.reduce((s, e) => s + e.endMin - e.startMin, 0)
+                const mins = bookedMinutes(data.events, d)
                 return (
                   <div key={d} className={cn("border-l px-2 py-2 text-center", d === today && "bg-accent/60")}>
                     <p className={cn("text-[11px] uppercase tracking-wide text-muted-foreground", d === today && "text-primary")}>

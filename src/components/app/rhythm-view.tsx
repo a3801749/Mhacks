@@ -9,11 +9,11 @@ import {
   rhythmBins,
   rhythmInsights,
   sessions,
-  windDownByDay,
   type RhythmGroupBy,
 } from "@/lib/analytics"
 import { addDays, formatClock, formatDuration, monthDay, weekdayShort } from "@/lib/time"
 import { cn } from "@/lib/utils"
+import { PreferenceSwitch } from "./preference-switch"
 import { useApp } from "./app-shell"
 
 const RANGES = [
@@ -39,7 +39,8 @@ export function RhythmView() {
   const max = Math.max(30, ...bins.map((b) => b.total))
   const total = list.reduce((s, x) => s + x.minutes, 0)
   const insights = rhythmInsights(data, today, days)
-  const windDown = new Map(windDownByDay(list).map((w) => [w.date, w.end]))
+  const activeDays = new Set(list.filter((s) => s.minutes > 0).map((s) => s.date)).size
+  const focusedBlocks = data.events.filter((e) => e.kind === "work" && e.actualMinutes > 0 && e.date >= from && e.date <= today).length
   const categories = categoryStats(data).filter((c) => c.course)
   const dates = Array.from({ length: days }, (_, i) => addDays(today, -i))
 
@@ -47,12 +48,7 @@ export function RhythmView() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-medium tracking-tight">Your rhythm</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Like screen time, but for your work: when in the day each project actually happens.{" "}
-            <span className="font-medium text-foreground">{formatDuration(total)}</span> logged in the last{" "}
-            {days === 7 ? "week" : "month"}.
-          </p>
+          <h1 className="font-heading text-3xl font-medium tracking-tight">Analytics</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <Segmented options={RANGES.map((r) => ({ key: r.days, label: r.label }))} value={days} onChange={(v) => setDays(v as 7 | 28)} />
@@ -60,12 +56,21 @@ export function RhythmView() {
         </div>
       </header>
 
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          ["Focused time", formatDuration(total)],
+          ["Active days", `${activeDays} / ${days}`],
+          ["Average per active day", activeDays ? formatDuration(Math.round(total / activeDays)) : "—"],
+          ["Blocks with logged time", String(focusedBlocks)],
+        ].map(([label, value]) => <div key={label} className="rounded-lg border bg-card p-4"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 font-heading text-2xl font-medium tabular-nums">{value}</dd></div>)}
+      </dl>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-labelledby="when-heading">
             <div className="flex items-baseline justify-between">
               <h2 id="when-heading" className="font-medium">When you work</h2>
-              <span className="text-xs text-muted-foreground">minutes per half hour, all {days} days combined</span>
+              <span className="sr-only">Total logged minutes per half-hour time of day across {days} days</span>
             </div>
             {list.length === 0 ? (
               <EmptyChart />
@@ -119,13 +124,12 @@ export function RhythmView() {
           <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-labelledby="days-heading">
             <div className="flex items-baseline justify-between">
               <h2 id="days-heading" className="font-medium">Day by day</h2>
-              <span className="text-xs text-muted-foreground">midnight to midnight · ring marks when you wrapped up</span>
+              
             </div>
             <div className="mt-4 space-y-1">
               {dates.map((date) => {
                 const daySessions = list.filter((s) => s.date === date)
                 const mins = daySessions.reduce((s, x) => s + x.minutes, 0)
-                const end = windDown.get(date)
                 const check = data.settings.checkInEnabled ? data.checkIns.find((c) => c.date === date) : undefined
                 return (
                   <div key={date} className="flex items-center gap-2">
@@ -148,16 +152,6 @@ export function RhythmView() {
                           title={`${groupKey(s.projectId, data, by).label} · ${formatClock(s.start)}–${formatClock(s.end)}`}
                         />
                       ))}
-                      {end != null && end <= 1440 && (
-                        <span
-                          className={cn(
-                            "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground/70 bg-background",
-                            days === 7 ? "size-3" : "size-2",
-                          )}
-                          style={{ left: `${(end / 1440) * 100}%` }}
-                          title={`Wrapped up ${formatClock(end)}`}
-                        />
-                      )}
                     </div>
                     <span className="w-12 shrink-0 text-right text-[11px] tabular-nums">{mins ? formatDuration(mins) : "—"}</span>
                     {data.settings.checkInEnabled && (
@@ -183,8 +177,9 @@ export function RhythmView() {
         </div>
 
         <aside className="space-y-6">
-          <section className="space-y-2" aria-labelledby="insights-heading">
-            <h2 id="insights-heading" className="font-heading text-lg font-medium">What stands out</h2>
+          <PreferenceSwitch setting="analyticsPatternsEnabled">Show patterns</PreferenceSwitch>
+          {data.settings.analyticsPatternsEnabled && <section className="space-y-2" aria-labelledby="insights-heading">
+            <h2 id="insights-heading" className="font-heading text-lg font-medium">Patterns</h2>
             {insights.length === 0 ? (
               <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
                 Log a few blocks and patterns will start showing up here.
@@ -206,7 +201,7 @@ export function RhythmView() {
                 </div>
               ))
             )}
-          </section>
+          </section>}
 
           <section className="rounded-2xl border bg-card p-4" aria-labelledby="accuracy-heading">
             <h2 id="accuracy-heading" className="font-medium">How long things really take</h2>

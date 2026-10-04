@@ -447,7 +447,7 @@ function MiniCalendar({
           )
         })}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         {(Object.keys(BUSY_STYLE) as Busyness[]).map((b) => (
           <span key={b} className="flex items-center gap-1">
             <span className={cn("size-2.5 rounded-sm", BUSY_STYLE[b].swatch)} />

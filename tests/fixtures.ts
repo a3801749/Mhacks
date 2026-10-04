@@ -24,7 +24,7 @@ export function week(patch: Partial<WeekData> = {}): WeekData {
     source: "memory", projects: [project()],
     tasks: [{ id: "t", projectId: "p", title: "Work", estimateMinutes: 180, done: false }],
     events: [], logs: [], checkIns: [],
-    settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, screenTimeEnabled: false },
+    settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, todayInsightsEnabled: true, analyticsPatternsEnabled: true, screenTimeEnabled: false },
     ...patch,
   }
 }

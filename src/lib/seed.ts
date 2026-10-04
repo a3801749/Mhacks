@@ -264,6 +264,6 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
     events,
     logs,
     checkIns,
-    settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, screenTimeEnabled: false },
+    settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, todayInsightsEnabled: true, analyticsPatternsEnabled: true, screenTimeEnabled: false },
   }
 }

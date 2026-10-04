@@ -45,9 +45,9 @@ async function ensureReady(today: string) {
 async function seed(sql: Sql, today: string) {
   const s = buildSeed(today)
   await sql.transaction([
-    sql`INSERT INTO users (id, name, guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled)
+    sql`INSERT INTO users (id, name, guidance_mode, check_in_enabled, ai_planner_enabled, today_insights_enabled, analytics_patterns_enabled, screen_time_enabled)
         VALUES (${USER_ID}, 'Demo student', ${s.settings.guidanceMode}, ${s.settings.checkInEnabled},
-                ${s.settings.aiPlannerEnabled}, ${s.settings.screenTimeEnabled})`,
+                ${s.settings.aiPlannerEnabled}, ${s.settings.todayInsightsEnabled}, ${s.settings.analyticsPatternsEnabled}, ${s.settings.screenTimeEnabled})`,
     ...s.projects.map(
       (p) =>
         sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, pinned, pin_count, pin_order,
@@ -88,7 +88,7 @@ function insertEvent(sql: Sql, e: CalendarEvent) {
 async function load(): Promise<WeekData> {
   const { sql } = client()
   const [users, projects, tasks, events, logs, checkIns] = await Promise.all([
-    sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
+    sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, today_insights_enabled, analytics_patterns_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
     sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, pin_order, target_minutes, progress_percent,
                to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
                to_char(completed_date, 'YYYY-MM-DD') AS completed_date
@@ -110,7 +110,9 @@ async function load(): Promise<WeekData> {
       guidanceMode: (u?.guidance_mode ?? "coach") as Settings["guidanceMode"],
       checkInEnabled: u?.check_in_enabled ?? true,
       aiPlannerEnabled: u?.ai_planner_enabled ?? true,
-      screenTimeEnabled: u?.screen_time_enabled ?? false,
+      todayInsightsEnabled: u?.today_insights_enabled ?? true,
+      analyticsPatternsEnabled: u?.analytics_patterns_enabled ?? true,
+      screenTimeEnabled: false,
     },
     checkIns: checkIns.map((r): CheckIn => ({ date: r.date, rating: r.rating, note: r.note })),
     projects: projects.map(
@@ -320,7 +322,8 @@ export const neonStore: Store = {
   async updateSettings(settings) {
     const { sql } = client()
     await sql`UPDATE users SET guidance_mode = ${settings.guidanceMode}, check_in_enabled = ${settings.checkInEnabled},
-                 ai_planner_enabled = ${settings.aiPlannerEnabled}, screen_time_enabled = ${settings.screenTimeEnabled}
+                 ai_planner_enabled = ${settings.aiPlannerEnabled}, today_insights_enabled = ${settings.todayInsightsEnabled},
+                 analytics_patterns_enabled = ${settings.analyticsPatternsEnabled}, screen_time_enabled = ${settings.screenTimeEnabled}
               WHERE id = ${USER_ID}`
     return load()
   },
