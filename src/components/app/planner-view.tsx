@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { CalendarPlus, GripVertical, MousePointerClick } from "lucide-react"
+import { CalendarPlus, ChevronLeft, ChevronRight, GripVertical, MousePointerClick } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { eventLanes, movedWindow, resizedWindow } from "@/lib/grid-editing"
 import { bookedMinutes } from "@/lib/day-layout"
@@ -19,7 +19,11 @@ const snap = (min: number) => Math.round(min / 15) * 15
 
 export function PlannerView() {
   const { data, today, now, openBlock, api } = useApp()
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i))
+  const [weekOffset, setWeekOffset] = useState(0)
+  const start = addDays(today, weekOffset * 7)
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  const { ensureThrough } = api
+  useEffect(() => { ensureThrough(days[6]) }, [ensureThrough, days[6]]) // eslint-disable-line react-hooks/exhaustive-deps
   const [drag, setDrag] = useState<{ date: string; a: number; b: number } | null>(null)
   const [block, setBlock] = useState<DraftBlock | null>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -131,7 +135,7 @@ export function PlannerView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-medium tracking-tight">Your Week</h1>
+          <h1 className="font-heading text-3xl font-medium tracking-tight">{weekOffset === 0 ? "Your Week" : weekOffset === 1 ? "Next week" : weekOffset === -1 ? "Last week" : `Week of ${monthDay(days[0])}`}</h1>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
             <MousePointerClick className="size-4" />
             <span>
@@ -142,8 +146,15 @@ export function PlannerView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-1" role="group" aria-label="Change week">
+          <Button variant="outline" size="icon-sm" aria-label="Previous week" onClick={() => setWeekOffset((w) => w - 1)}><ChevronLeft /></Button>
+          <Button variant="ghost" size="sm" disabled={weekOffset === 0} onClick={() => setWeekOffset(0)} className="min-w-[9.5rem] tabular-nums" aria-live="polite">
+            {weekOffset === 0 ? `${monthDay(days[0])} – ${monthDay(days[6])}` : `${monthDay(days[0])} – ${monthDay(days[6])} · Back to today`}
+          </Button>
+          <Button variant="outline" size="icon-sm" aria-label="Next week" onClick={() => setWeekOffset((w) => w + 1)}><ChevronRight /></Button>
+        </div>
         <PreferenceSwitch setting="aiPlannerEnabled">Tilly suggestions</PreferenceSwitch>
-        <Button onClick={() => setBlock({ date: addDays(today, 1), startMin: 13 * 60, endMin: 17 * 60 })}>
+        <Button onClick={() => setBlock({ date: weekOffset > 0 ? days[0] : addDays(today, 1), startMin: 13 * 60, endMin: 17 * 60 })}>
           <CalendarPlus /> Add a block
         </Button>
         </div>
