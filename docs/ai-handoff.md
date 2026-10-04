@@ -196,7 +196,7 @@ Not built. Settings cannot turn it on (`screenTimeEnabled: false` in the setting
 ## Running and checking
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local   # optional
 npm run dev                  # http://localhost:4317
 npx tsc --noEmit
@@ -206,9 +206,13 @@ npm run lint
 
 Every external key is optional. Gemini, ElevenLabs, and Neon each have a fallback (see the table in `README.md`).
 
+Install from the committed lockfile. Keep `shadcn` at the pinned version: older releases lack the
+`shadcn/tailwind.css` export used by `globals.css`. Keep `eslint-config-next` aligned with `next`.
+
 `next.config.ts` sets `allowedDevOrigins` for `127.0.0.1`. Without it, Next 16 refuses the client bundle and the app sits on skeletons.
 
-`next build` and `next dev` share `.next`. Stop the dev server before a production build, then start it again.
+This installed Next.js version writes dev output to `.next/dev` and production output to `.next`, so the two
+can run concurrently. Both directories are generated artifacts.
 
 This Next.js version differs from older training data. Read `node_modules/next/dist/docs/` before using a Next API you are not sure about. The warning block at the top of `AGENTS.md` is rewritten by `next dev`; leave it in place.
 

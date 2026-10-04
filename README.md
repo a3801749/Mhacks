@@ -29,10 +29,13 @@ Optional features (daily check-in, AI planner, screen time) are toggled in Setti
 ## Run it
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local   # optional — every key has a fallback
 npm run dev                  # http://localhost:4317
 ```
+
+Use the committed lockfile for installs. `shadcn` is pinned because the app imports its `tailwind.css` export;
+the Next.js ESLint config must match the installed Next.js version.
 
 With no keys, everything still works:
 
