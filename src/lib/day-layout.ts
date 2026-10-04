@@ -15,3 +15,8 @@ export function addableSlot(start: number, end: number, nowMinute?: number) {
   const from = Math.max(start, nowMinute === undefined ? 0 : Math.ceil(nowMinute / 15) * 15)
   return end - from >= 15 ? { startMin: from, endMin: Math.min(end, from + 60) } : null
 }
+
+/** Before the first block, offer the hour leading into it rather than midnight. */
+export function leadingSlot(firstStart: number, nowMinute?: number) {
+  return addableSlot(Math.max(0, firstStart - 60), firstStart, nowMinute)
+}

@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { addableSlot, bookedMinutes, gapBefore } from "../src/lib/day-layout"
+import { addableSlot, bookedMinutes, gapBefore, leadingSlot } from "../src/lib/day-layout"
 import { event, today } from "./fixtures"
 
 test("booked totals include personal events after skip and restore", () => {
@@ -21,4 +21,11 @@ test("gap creation respects the current minute, midnight, and minimum duration",
   assert.equal(addableSlot(660, 1440, 1430), null)
   assert.equal(addableSlot(660, 680, 670), null)
   assert.deepEqual(addableSlot(660, 720), { startMin: 660, endMin: 720 })
+})
+
+test("leading slot books the hour before the first block, never the past", () => {
+  assert.deepEqual(leadingSlot(540), { startMin: 480, endMin: 540 })
+  assert.deepEqual(leadingSlot(30), { startMin: 0, endMin: 30 })
+  assert.deepEqual(leadingSlot(540, 500), { startMin: 510, endMin: 540 })
+  assert.equal(leadingSlot(540, 530), null)
 })

@@ -3,7 +3,7 @@
 import { CalendarPlus, Plus, Sun } from "lucide-react"
 import { formatClock, formatDuration, monthDay, weekdayLong, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, WeekData } from "@/lib/types"
-import { addableSlot, bookedMinutes, gapBefore } from "@/lib/day-layout"
+import { addableSlot, bookedMinutes, gapBefore, leadingSlot } from "@/lib/day-layout"
 import { cn } from "@/lib/utils"
 import { BlockCard } from "./block-card"
 
@@ -138,10 +138,14 @@ export function DayTimeline({
             const gap = prev ? Math.max(0, event.startMin - frontier) : 0
             const isNow = isToday && event.status !== "skipped" && nowMinute >= event.startMin && nowMinute < event.endMin
             const showNowLine = isToday && nowMinute < event.startMin && (!prev || nowMinute >= frontier)
-            const slot = prev && canAdd ? addableSlot(frontier, event.startMin, isToday ? nowMinute : undefined) : null
+            const slot = !canAdd ? null
+              : prev ? addableSlot(frontier, event.startMin, isToday ? nowMinute : undefined)
+              : leadingSlot(event.startMin, isToday ? nowMinute : undefined)
             return (
               <li key={event.id}>
-                {prev ? <Gap minutes={gap} onAdd={slot ? () => onAddGap!({ date, ...slot }) : undefined} nowLine={showNowLine ? nowMinute : undefined} /> : showNowLine && <NowLine minute={nowMinute} />}
+                {prev || slot
+                  ? <Gap minutes={gap} onAdd={slot ? () => onAddGap!({ date, ...slot }) : undefined} leading={!prev} nowLine={showNowLine ? nowMinute : undefined} />
+                  : showNowLine && <NowLine minute={nowMinute} />}
                 <div
                   style={{ minHeight: Math.max(MIN_CARD_PX, (event.endMin - event.startMin) * PX_PER_MIN) }}
                   className="flex"
@@ -175,15 +179,18 @@ export function DayTimeline({
   )
 }
 
-function Gap({ minutes, onAdd, trailing, nowLine }: { minutes: number; onAdd?: () => void; trailing?: boolean; nowLine?: number }) {
-  const height = Math.min(120, Math.max(onAdd ? 72 : 20, minutes * PX_PER_MIN * 0.45))
+function Gap({ minutes, onAdd, trailing, leading, nowLine }: {
+  minutes: number; onAdd?: () => void; trailing?: boolean; leading?: boolean; nowLine?: number
+}) {
+  const height = leading ? 56 : Math.min(120, Math.max(onAdd ? 72 : 20, minutes * PX_PER_MIN * 0.45))
   return (
-    <div className="relative flex flex-col items-center justify-center gap-2 py-3" style={{ minHeight: height }}>
+    <div className="group relative flex flex-col items-center justify-center gap-2 py-3" style={{ minHeight: height }}>
       {nowLine !== undefined && <div className="w-full"><NowLine minute={nowLine} /></div>}
-      {onAdd ? <button type="button" onClick={onAdd} className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-primary hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring">
-        <Plus className="size-3.5" /> Add something here
+      {/* Opacity, not display, keeps the button reachable by Tab; touch screens have no hover. */}
+      {onAdd ? <button type="button" onClick={onAdd} className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-secondary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring [@media(hover:none)]:opacity-100">
+        <Plus className="size-3.5" /> {leading ? "Add something before this" : "Add something here"}
       </button> : null}
-      {!trailing && minutes >= 30 && <p className="text-center text-xs text-muted-foreground">{formatDuration(minutes)} of breathing room</p>}
+      {!trailing && !leading && minutes >= 30 && <p className="text-center text-xs text-muted-foreground">{formatDuration(minutes)} of breathing room</p>}
     </div>
   )
 }
