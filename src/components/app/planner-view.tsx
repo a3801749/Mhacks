@@ -154,7 +154,7 @@ export function PlannerView() {
           <Button variant="outline" size="icon-sm" aria-label="Next week" onClick={() => setWeekOffset((w) => w + 1)}><ChevronRight /></Button>
         </div>
         <PreferenceSwitch setting="aiPlannerEnabled">Tilly suggestions</PreferenceSwitch>
-        <Button onClick={() => setBlock({ date: weekOffset > 0 ? days[0] : addDays(today, 1), startMin: 13 * 60, endMin: 17 * 60 })}>
+        <Button onClick={() => setBlock({ date: weekOffset === 0 ? addDays(today, 1) : days[0], startMin: 13 * 60, endMin: 17 * 60 })}>
           <CalendarPlus /> Add a block
         </Button>
         </div>
