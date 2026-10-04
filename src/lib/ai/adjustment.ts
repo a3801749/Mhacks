@@ -12,9 +12,13 @@ export function adjustmentChanges(raw: unknown, data: WeekData, request: ReturnT
   const create = filled.find((c) => c.action === "create" &&
     (request.title === "New event" || c.title?.toLowerCase().startsWith(request.title.toLowerCase())))
   if (!create) return []
-  const clashes = new Set(data.events.filter((e) => e.status === "planned" && e.date === create.date &&
-    e.startMin < create.endMin! && e.endMin > create.startMin!).map((e) => e.id))
-  const scoped = [create, ...filled.filter((c) => (c.action === "move" || c.action === "shorten") && clashes.has(c.eventId!))]
+  const clashes = new Map(data.events.filter((e) => e.status === "planned" && e.date === create.date &&
+    e.startMin < create.endMin! && e.endMin > create.startMin!).map((e) => [e.id, e]))
+  const moves = filled.filter((c) => c.action === "move" && clashes.has(c.eventId!)).map((c) => {
+    const original = clashes.get(c.eventId!)!
+    return typeof c.startMin === "number" ? { ...c, endMin: c.startMin + original.endMin - original.startMin } : c
+  })
+  const scoped = [create, ...moves]
   let changes = sanitizeScheduleChanges(scoped, data, now)
   if (!changes.some((c) => c.action === "create")) return []
   changes = sanitizeScheduleChanges([...changes, ...makeRoom(data, changes, now)], data, now)

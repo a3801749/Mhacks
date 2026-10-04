@@ -77,6 +77,28 @@ test("a no-op model move is replaced only when a real block overlaps the request
   assert.equal(move.endMin! - move.startMin!, 60)
 })
 
+test("making room for lunch preserves the conflicting work's duration", () => {
+  const data = week({ events: [event({ date, startMin: 720, endMin: 810 })] })
+  const changes = adjustmentChanges([
+    { action: "move", eventId: "e", date, startMin: 480, endMin: 510, reason: "Room" },
+  ], data, request, now)
+  const move = changes.find((c) => c.action === "move")!
+  assert.equal(move.startMin, 480)
+  assert.equal(move.endMin, 570)
+})
+
+test("a lunch request cannot shorten or skip the overlapping work", () => {
+  const data = week({ events: [event({ date, startMin: 720, endMin: 810 })] })
+  for (const action of ["shorten", "skip"]) {
+    const changes = adjustmentChanges([
+      { action, eventId: "e", startMin: 720, endMin: 750, reason: "Room" },
+    ], data, request, now)
+    assert.ok(changes.some((c) => c.action === "create"))
+    assert.ok(changes.some((c) => c.action === "move" && c.endMin! - c.startMin! === 90))
+    assert.ok(changes.every((c) => c.action !== "shorten" && c.action !== "skip"))
+  }
+})
+
 test("Lighthouse replies describe the effective lunch proposal and omit discarded moves", () => {
   const data = week({ events: [event({ title: "Prototype voice flow" })] })
   const changes = adjustmentChanges([], data, request, now)
