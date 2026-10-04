@@ -138,7 +138,7 @@ export function useWeek(today: string | null) {
     updateSettings: (patch: Partial<Settings>) =>
       mutate(() => request<WeekData>(`/api/settings`, { method: "PUT", body: json(patch) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
-      mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json(patch) }), msg),
+      mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
     togglePin: (projectId: string, pinned: boolean) => {
       setData((prev) =>
         prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? { ...p, pinned } : p)) } : prev,

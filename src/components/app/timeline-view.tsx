@@ -9,6 +9,7 @@ import { ASSIGNMENT_TYPES } from "@/lib/brand"
 import { addDays, daysBetween, formatDuration, fromDateKey, monthDay } from "@/lib/time"
 import type { Project } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { DueDateInput, DueEdge } from "./timeline-due"
 import { useApp } from "./app-shell"
 
 interface Row {
@@ -21,12 +22,12 @@ interface Row {
   logged: number
   remaining: number | null
   status: { label: string; tone: "good" | "warn" | "done" | "idle" }
-  planned: string[]
 }
 
 export function TimelineView() {
   const { data, today, now, editProject } = useApp()
   const [showFinished, setShowFinished] = useState(false)
+  const [preview, setPreview] = useState<{ id: string; date: string } | null>(null)
 
   const health = projectHealth(data, today)
   const rows: Row[] = health.map((h) => {
@@ -40,8 +41,8 @@ export function TimelineView() {
       const lag = daysBetween(fillEnd!, today)
       status =
         lag <= 0
-          ? { label: lag < -1 ? `${-lag} days ahead` : "On pace", tone: "good" }
-          : { label: `${lag} day${lag === 1 ? "" : "s"} behind pace`, tone: "warn" }
+          ? { label: lag < -1 ? "Ahead" : "On pace", tone: "good" }
+          : { label: "Behind pace", tone: "warn" }
     }
     return {
       project: h.project,
@@ -53,11 +54,7 @@ export function TimelineView() {
       logged: h.logged,
       remaining: h.remaining,
       status,
-      planned: [
-        ...new Set(
-          data.events.filter((e) => e.projectId === h.project.id && e.status === "planned" && e.date >= today).map((e) => e.date),
-        ),
-      ],
+
     }
   })
   if (showFinished) {
@@ -72,7 +69,6 @@ export function TimelineView() {
         logged: projectLogged(p.id, data.tasks, data.logs),
         remaining: null,
         status: { label: `Finished ${monthDay(p.completedDate!)}`, tone: "done" },
-        planned: [],
       })
     }
   }
@@ -92,9 +88,7 @@ export function TimelineView() {
         <div>
           <h1 className="font-heading text-3xl font-medium tracking-tight">Timeline</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Each bar runs from when an assignment was given to when it&apos;s due. The fill starts the day you first
-            worked on it and grows with your progress — if it reaches the <span className="font-medium text-primary">today</span>{" "}
-            line, you&apos;re on pace.
+            Assignments from assigned date to due date. Drag a bar’s right edge to change its due date, or use the date field.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -138,8 +132,11 @@ export function TimelineView() {
           {rows.length === 0 ? (
             <p className="p-8 text-center text-sm text-muted-foreground">No assignments yet. Add one to see it here.</p>
           ) : (
-            rows.map((r) => (
+            rows.map((r) => {
+              const due = preview?.id === r.project.id ? preview.date : r.end
+              return (
               <div key={r.project.id} className="grid grid-cols-[220px_minmax(0,1fr)] border-b last:border-b-0">
+                <div>
                 <button
                   onClick={() => editProject(r.project)}
                   className="min-w-0 px-4 py-3 text-left transition-colors hover:bg-secondary/60"
@@ -163,7 +160,9 @@ export function TimelineView() {
                     )}
                   </p>
                 </button>
-                <div className="relative min-h-16">
+                <DueDateInput key={`${r.project.id}-${r.project.dueDate}`} project={r.project} />
+                </div>
+                <div className="relative min-h-24">
                   {ticks.map((d) =>
                     fromDateKey(d).getDay() === 1 ? (
                       <span key={d} className="absolute inset-y-0 w-px bg-border/70" style={{ left: `${x(d)}%` }} />
@@ -173,7 +172,7 @@ export function TimelineView() {
                     className={cn("absolute top-1/2 h-7 -translate-y-1/2 rounded-lg", r.status.tone === "done" && !r.remaining && "opacity-60")}
                     style={{
                       left: `${x(r.start)}%`,
-                      width: `${x(addDays(r.end, 1)) - x(r.start)}%`,
+                      width: `${Math.max(0, Math.min(100, x(addDays(due, 1))) - x(r.start))}%`,
                       backgroundColor: `${r.project.color}26`,
                       boxShadow: `inset 0 0 0 1px ${r.project.color}55`,
                     }}
@@ -192,23 +191,13 @@ export function TimelineView() {
                       <span className="truncate">{r.percent}%</span>
                     </div>
                   )}
-                  {r.planned.map((d) => (
-                    <span
-                      key={d}
-                      className="absolute bottom-1.5 size-1.5 -translate-x-1/2 rounded-full"
-                      style={{ left: `${x(d, 0.5)}%`, backgroundColor: r.project.color }}
-                      title={`Work block booked ${monthDay(d)}`}
-                    />
-                  ))}
-                  <span
-                    className="absolute top-1/2 h-9 -translate-y-1/2 border-r-2 border-dotted"
-                    style={{ left: `${x(addDays(r.end, 1))}%`, borderColor: r.project.color }}
-                    aria-hidden
-                  />
+                  <DueEdge project={r.project} date={due} position={x(addDays(due, 1))} days={totalDays} onPreview={(date) => setPreview((current) => date ? { id: r.project.id, date } : current?.id === r.project.id ? null : current)} />
+                  {preview?.id === r.project.id && <span className="absolute top-1 right-2 rounded bg-card px-2 text-xs text-muted-foreground">Due {monthDay(due)}</span>}
                   <span className="absolute inset-y-0 w-0.5 bg-primary" style={{ left: `${todayX}%` }} aria-hidden />
                 </div>
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </section>
@@ -219,9 +208,6 @@ export function TimelineView() {
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-3 w-6 rounded bg-primary" /> Progress, from the day you started
-        </li>
-        <li className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-primary" /> Work block booked
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-3 w-0.5 bg-primary" /> Today
