@@ -76,13 +76,13 @@ export function useWeek(today: string | null) {
     replace: (next: WeekData) => setData((prev) => ({ ...next, integrations: prev?.integrations })),
     logTime: (eventId: string, minutes: number, note: string) =>
       mutate(
-        () => request(`/api/events/${eventId}/log`, { method: "POST", body: json({ minutes, note }) }),
+        () => request<WeekData>(`/api/events/${eventId}/log`, { method: "POST", body: json({ minutes, note }) }),
         minutes > 0 ? `Logged ${formatDuration(minutes)}. Nice.` : `Took ${formatDuration(-minutes)} off`,
       ),
     updateLog: (logId: string, patch: { minutes?: number; note?: string }) =>
-      mutate(() => request(`/api/logs/${logId}`, { method: "PATCH", body: json(patch) }), "Entry updated"),
+      mutate(() => request<WeekData>(`/api/logs/${logId}`, { method: "PATCH", body: json(patch) }), "Entry updated"),
     deleteLog: (logId: string) =>
-      mutate(() => request(`/api/logs/${logId}`, { method: "DELETE" }), "Entry removed"),
+      mutate(() => request<WeekData>(`/api/logs/${logId}`, { method: "DELETE" }), "Entry removed"),
     reorderPins: (ids: string[]) => {
       setData((prev) =>
         prev
@@ -92,35 +92,35 @@ export function useWeek(today: string | null) {
             }
           : prev,
       )
-      return mutate(() => request(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
+      return mutate(() => request<WeekData>(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
     },
     updateEvent: (eventId: string, patch: EventPatch, msg?: string) =>
-      mutate(() => request(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
+      mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
     deleteEvent: (eventId: string) =>
       mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "DELETE" })),
     setTaskDone: (taskId: string, done: boolean) =>
       mutate(
-        () => request(`/api/tasks/${taskId}`, { method: "PATCH", body: json({ done }) }),
+        () => request<WeekData>(`/api/tasks/${taskId}`, { method: "PATCH", body: json({ done }) }),
         done ? "Task done. Take a breath." : "Task reopened",
       ),
     applyChanges: (changes: ScheduleChange[], msg = "Schedule updated") =>
       mutate(() => request<AppliedWeek>(`/api/schedule/apply`, { method: "POST", body: json({ changes, today }) }), msg),
     updateSettings: (patch: Partial<Settings>) =>
-      mutate(() => request(`/api/settings`, { method: "PUT", body: json(patch) })),
+      mutate(() => request<WeekData>(`/api/settings`, { method: "PUT", body: json(patch) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
-      mutate(() => request(`/api/projects/${projectId}`, { method: "PATCH", body: json(patch) }), msg),
+      mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json(patch) }), msg),
     togglePin: (projectId: string, pinned: boolean) => {
       setData((prev) =>
         prev ? { ...prev, projects: prev.projects.map((p) => (p.id === projectId ? { ...p, pinned } : p)) } : prev,
       )
-      return mutate(() => request(`/api/projects/${projectId}`, { method: "PATCH", body: json({ pinned }) }))
+      return mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ pinned }) }))
     },
     createProject: (project: NewProject) =>
-      mutate(() => request(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
+      mutate(() => request<WeekData>(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
     saveCheckIn: (date: string, rating: number, note: string) =>
-      mutate(() => request(`/api/checkins`, { method: "PUT", body: json({ date, rating, note }) }), "Thanks — noted."),
+      mutate(() => request<WeekData>(`/api/checkins`, { method: "PUT", body: json({ date, rating, note }) }), "Thanks — noted."),
     reset: () =>
-      mutate(() => request(`/api/reset`, { method: "POST", body: json({ today }) }), "Demo data restored"),
+      mutate(() => request<WeekData>(`/api/reset`, { method: "POST", body: json({ today }) }), "Demo data restored"),
   }
 }
 
