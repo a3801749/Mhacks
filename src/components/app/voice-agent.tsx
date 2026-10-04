@@ -1,25 +1,28 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowRight, Check, Loader2, Mic, MicOff, SendHorizontal, Undo2, Volume2, VolumeX, X } from "lucide-react"
+import { Loader2, Mic, MicOff, SendHorizontal, Volume2, VolumeX } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AGENT_NAME, GUIDANCE_MODES } from "@/lib/brand"
 import { describeChange } from "@/lib/describe"
-import type { AdjustResponse, AppliedWeek, CalendarEvent, ChatTurn, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+import type { AdjustResponse, AppliedWeek, ChatTurn, Integrations, ScheduleChange, WeekData } from "@/lib/types"
 import { scheduleUndo } from "@/lib/undo"
 import { cn } from "@/lib/utils"
 import { request, type WeekApi } from "@/hooks/use-week"
+import { createdIdsByChange, ProposalCard, type ProposalItem, type ProposalState } from "./proposal-card"
 
 interface AgentTurn extends ChatTurn {
   id: number
-  changes?: ScheduleChange[]
-  state?: "pending" | "applied" | "declined" | "undone"
-  before?: CalendarEvent[]
-  createdEventIds?: string[]
+  items?: ProposalItem[]
   source?: AdjustResponse["source"]
+}
+
+function appliedItems(changes: ScheduleChange[], week: AppliedWeek): ProposalItem[] {
+  const created = createdIdsByChange(changes, week)
+  return changes.map((change, i) => ({ change, state: "applied", before: week.previousEvents, createdEventIds: created[i] }))
 }
 
 const QUICK_PROMPTS = [
@@ -73,7 +76,7 @@ export function VoiceAgent({
   const [interim, setInterim] = useState("")
   const [muted, setMuted] = useState(false)
   const [speaking, setSpeaking] = useState(false)
-  const [applyingTurn, setApplyingTurn] = useState<number | null>(null)
+  const [applying, setApplying] = useState<{ turnId: number; indices: number[] } | null>(null)
   const recognitionRef = useRef<Recognition | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -138,7 +141,7 @@ export function VoiceAgent({
   const send = useCallback(
     async (raw: string) => {
       const message = raw.trim()
-      if (!message || thinking || applyingTurn !== null) return
+      if (!message || thinking || applying !== null) return
       setInput("")
       setInterim("")
       const history: ChatTurn[] = turns.map(({ role, text }) => ({ role, text }))
@@ -156,10 +159,9 @@ export function VoiceAgent({
             id: idRef.current++,
             role: "agent",
             text: res.reply,
-            changes: res.changes,
-            state: res.changes.length ? (res.autoApplied ? "applied" : "pending") : undefined,
-            before: res.week?.previousEvents,
-            createdEventIds: res.week?.createdEventIds,
+            items: res.autoApplied && res.week
+              ? appliedItems(res.changes, res.week)
+              : res.changes.map((change) => ({ change, state: "pending" })),
             source: res.source,
           },
         ])
@@ -178,7 +180,7 @@ export function VoiceAgent({
         setThinking(false)
       }
     },
-    [api, now, speak, thinking, turns, applyingTurn],
+    [api, now, speak, thinking, turns, applying],
   )
 
   const sendRef = useRef(send)
@@ -232,27 +234,32 @@ export function VoiceAgent({
     rec.start()
   }
 
-  const setTurnState = (id: number, state: AgentTurn["state"]) =>
-    setTurns((t) => t.map((x) => (x.id === id ? { ...x, state } : x)))
+  const patchItems = (turnId: number, patch: (items: ProposalItem[]) => ProposalItem[]) =>
+    setTurns((t) => t.map((x) => (x.id === turnId && x.items ? { ...x, items: patch(x.items) } : x)))
+  const setItemState = (turnId: number, index: number, state: ProposalState) =>
+    patchItems(turnId, (items) => items.map((item, i) => (i === index ? { ...item, state } : item)))
 
-  const accept = async (turn: AgentTurn) => {
-    if (!turn.changes || thinking || applyingTurn !== null) return
-    setApplyingTurn(turn.id)
+  const apply = async (turn: AgentTurn, indices: number[]) => {
+    if (!turn.items || thinking || applying) return
+    const changes = indices.map((i) => turn.items![i].change)
+    setApplying({ turnId: turn.id, indices })
     try {
-      const ok = await api.applyChanges(turn.changes, "Done — your calendar shifted")
-      if (ok) setTurns((turns) => turns.map((t) => t.id === turn.id ? {
-        ...t, state: "applied", before: ok.previousEvents, createdEventIds: ok.createdEventIds,
-      } : t))
+      const one = changes.length === 1 ? describeChange(changes[0], data.events) : null
+      const ok = await api.applyChanges(changes, one ? `${one.verb === "Add" ? "Added" : "Updated"} ${one.title}` : "Done — your calendar shifted")
+      if (!ok) return
+      const applied = appliedItems(changes, ok)
+      patchItems(turn.id, (items) => items.map((item, i) => (indices.includes(i) ? applied[indices.indexOf(i)] : item)))
     } finally {
-      setApplyingTurn(null)
+      setApplying(null)
     }
   }
 
-  const undo = async (turn: AgentTurn) => {
-    if (!turn.changes || !turn.before || thinking || applyingTurn !== null) return
-    setApplyingTurn(turn.id)
+  const undo = async (turn: AgentTurn, index: number) => {
+    const item = turn.items?.[index]
+    if (!item?.before || thinking || applying) return
+    setApplying({ turnId: turn.id, indices: [index] })
     try {
-      const undo = scheduleUndo(turn.before, data.events, turn.changes, turn.createdEventIds ?? [])
+      const undo = scheduleUndo(item.before, data.events, [item.change], item.createdEventIds ?? [])
       for (const id of undo.remove) {
         if (!await api.deleteEvent(id)) return
       }
@@ -260,9 +267,9 @@ export function VoiceAgent({
         if (!await api.updateEvent(restore.id, restore.patch)) return
       }
       toast.success("Put back the way it was")
-      setTurnState(turn.id, "undone")
+      patchItems(turn.id, (items) => items.map((x, i) => (i === index ? { change: x.change, state: "pending" } : x)))
     } finally {
-      setApplyingTurn(null)
+      setApplying(null)
     }
   }
 
@@ -335,48 +342,17 @@ export function VoiceAgent({
                 )}
               >
                 <p>{turn.text}</p>
-                {turn.changes && turn.changes.length > 0 && (
-                  <div className="mt-2.5 space-y-1.5 rounded-xl bg-background/80 p-2.5 text-foreground">
-                    {turn.changes.map((c, i) => {
-                      const d = describeChange(c, turn.before ?? data.events)
-                      return (
-                        <div key={i} className="text-xs">
-                          <p className="font-medium">
-                            {d.verb} · {d.title}
-                          </p>
-                          <p className="flex flex-wrap items-center gap-1 text-muted-foreground">
-                            {d.from && <span>{d.from}</span>}
-                            {d.from && d.to && <ArrowRight className="size-3" />}
-                            {d.to && <span className="text-foreground">{d.to}</span>}
-                          </p>
-                        </div>
-                      )
-                    })}
-                    <div className="flex gap-2 pt-1">
-                      {turn.state === "pending" && (
-                        <>
-                          <Button size="xs" disabled={thinking || applyingTurn !== null} onClick={() => accept(turn)}>
-                            <Check /> Sounds good
-                          </Button>
-                          <Button size="xs" variant="ghost" onClick={() => setTurnState(turn.id, "declined")}>
-                            <X /> Not now
-                          </Button>
-                        </>
-                      )}
-                      {turn.state === "applied" && (
-                        <>
-                          <span className="flex items-center gap-1 text-xs text-emerald-700">
-                            <Check className="size-3" /> Applied
-                          </span>
-                          <Button size="xs" variant="ghost" disabled={thinking || applyingTurn !== null} onClick={() => undo(turn)}>
-                            <Undo2 /> Undo
-                          </Button>
-                        </>
-                      )}
-                      {turn.state === "declined" && <span className="text-xs text-muted-foreground">Left as is</span>}
-                      {turn.state === "undone" && <span className="text-xs text-muted-foreground">Undone</span>}
-                    </div>
-                  </div>
+                {turn.items && turn.items.length > 0 && (
+                  <ProposalCard
+                    items={turn.items}
+                    events={data.events}
+                    busy={thinking || applying !== null}
+                    applying={applying?.turnId === turn.id ? applying.indices : null}
+                    onApply={(indices) => apply(turn, indices)}
+                    onDecline={(i) => setItemState(turn.id, i, "declined")}
+                    onRestore={(i) => setItemState(turn.id, i, "pending")}
+                    onUndo={(i) => undo(turn, i)}
+                  />
                 )}
               </div>
             </div>
@@ -409,7 +385,7 @@ export function VoiceAgent({
             variant={listening ? "destructive" : "default"}
             className={cn("shrink-0 rounded-full", listening && "animate-pulse")}
             onClick={toggleListening}
-            disabled={!listening && (thinking || applyingTurn !== null)}
+            disabled={!listening && (thinking || applying !== null)}
             aria-label={listening ? "Stop listening" : "Talk to Tilly"}
             title={speechSupported ? undefined : "Voice input works in Chrome and Edge"}
           >
