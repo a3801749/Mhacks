@@ -63,6 +63,7 @@ export interface CategoryStat {
 
 export function categoryStats(data: WeekData): CategoryStat[] {
   const done = data.projects.filter((p) => p.completedDate)
+  const courses = new Map(courseList(data).map((c) => [courseKey(c.name), c.name]))
   const groups = new Map<string, CategoryStat>()
   const add = (key: string, course: string | null, type: Project["type"] | null, p: Project, actual: number) => {
     const g = groups.get(key) ?? { key, course, type, planned: 0, actual: 0, multiplier: 1, samples: 0 }
@@ -76,7 +77,8 @@ export function categoryStats(data: WeekData): CategoryStat[] {
     // Finished without logging anything says nothing about how long the work takes.
     const actual = projectLogged(p.id, data.tasks, data.logs, data.events)
     if (actual <= 0) continue
-    add(`${p.course}|${p.type}`, p.course, p.type, p, actual)
+    const key = courseKey(p.course)
+    add(`${key}|${p.type}`, courses.get(key) ?? p.course, p.type, p, actual)
     add(`*|${p.type}`, null, p.type, p, actual)
   }
   return [...groups.values()]
@@ -100,7 +102,7 @@ export function estimateProject(project: Project, data: WeekData, stats = catego
   const logged = projectLogged(project.id, data.tasks, data.logs, data.events)
   const p = project.progressPercent
   const category =
-    stats.find((s) => s.key === `${project.course}|${project.type}`) ?? stats.find((s) => s.key === `*|${project.type}`)
+    stats.find((s) => s.key === `${courseKey(project.course)}|${project.type}`) ?? stats.find((s) => s.key === `*|${project.type}`)
 
   if (p === 0 && logged >= 120) {
     return {
@@ -206,10 +208,11 @@ export function pinPreferences(data: WeekData): PinPreference | null {
     const [k, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
     return { k, share: n / total }
   }
-  const course = top((p) => p.course)
+  const course = top((p) => courseKey(p.course))
+  const name = courseList(data).find((c) => courseKey(c.name) === course.k)?.name ?? course.k
   const type = top((p) => p.type)
   return {
-    course: course.share >= 0.35 ? course.k : null,
+    course: course.share >= 0.35 ? name : null,
     type: type.share >= 0.35 ? type.k : null,
     courseShare: course.share,
     typeShare: type.share,
@@ -221,7 +224,7 @@ export function pinPreferences(data: WeekData): PinPreference | null {
 export function attentionWeight(p: Project, prefs = null as PinPreference | null) {
   let w: number = PRIORITIES[p.priority].weight
   if (p.pinned) w *= 1.3
-  if (prefs?.course === p.course) w *= 1.1
+  if (prefs?.course && courseKey(prefs.course) === courseKey(p.course)) w *= 1.1
   if (prefs?.type === p.type) w *= 1.1
   return w
 }
