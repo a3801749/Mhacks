@@ -9,6 +9,7 @@ import { addDays, validDate } from "../time"
 import type { CalendarEvent, CheckIn, Course, EventSeries, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
+import { validateScheduleChanges } from "../schedule-validation"
 
 const USER_ID = "u-demo"
 
@@ -443,18 +444,43 @@ export const neonStore: Store = {
   async applyChanges(changes) {
     const { sql } = client()
     const week = await load()
+    try {
+      changes = validateScheduleChanges(changes, week)
+    } catch (err) {
+      throw new RequestError(err instanceof Error ? err.message : "Your calendar changed. Refresh and try again.", 409)
+    }
     const next = applyChanges(week.events, changes)
     const before = new Map(week.events.map((e) => [e.id, JSON.stringify(e)]))
     const dirty = next.filter((e) => before.get(e.id) !== JSON.stringify(e))
-    if (dirty.length > 0) await sql.transaction([
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
-      ...[...new Set(dirty.map((e) => e.seriesId).filter((id) => id !== null))].map((id) => sql`UPDATE event_series
-        SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1)) WHERE id = ${id}`),
-      insertEvents(sql, dirty),
-    ])
     const changedIds = new Set(changes.map((c) => c.eventId))
+    const previousEvents = week.events.filter((e) => changedIds.has(e.id))
+    try {
+      if (dirty.length > 0) await sql.transaction([
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
+        sql`WITH expected AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(eventRows(previousEvents))}::jsonb) AS r(
+            id text, project_id text, task_id text, title text, date date, start_min int, end_min int, status text,
+            actual_minutes int, kind text, moved_from_date date, moved_from_start_min int, location text,
+            meeting_url text, notes text, series_id text, occurrence_date date, is_exception boolean)
+        ), locked AS MATERIALIZED (
+          SELECT e.* FROM events e JOIN expected x ON e.id = x.id WHERE e.user_id = ${USER_ID} FOR UPDATE OF e
+        ) SELECT 1 / CASE WHEN (SELECT count(*) FROM locked) = ${previousEvents.length}
+          AND NOT EXISTS (SELECT 1 FROM locked e JOIN expected x ON e.id = x.id
+            WHERE ROW(e.project_id, e.task_id, e.title, e.date, e.start_min, e.end_min, e.status, e.actual_minutes,
+              e.kind, e.moved_from_date, e.moved_from_start_min, e.location, e.meeting_url, e.notes, e.series_id, e.occurrence_date, e.is_exception)
+            IS DISTINCT FROM ROW(x.project_id, x.task_id, x.title, x.date, x.start_min, x.end_min, x.status, x.actual_minutes,
+              x.kind, x.moved_from_date, x.moved_from_start_min, x.location, x.meeting_url, x.notes, x.series_id, x.occurrence_date, x.is_exception))
+          THEN 1 ELSE 0 END AS unchanged`,
+        ...[...new Set(dirty.map((e) => e.seriesId).filter((id) => id !== null))].map((id) => sql`UPDATE event_series
+          SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1)) WHERE id = ${id}`),
+        insertEvents(sql, dirty),
+      ])
+    } catch (err) {
+      if (err && typeof err === "object" && "code" in err && err.code === "22012") throw new RequestError("Your calendar changed while saving. Refresh and try again.", 409)
+      throw err
+    }
     return { ...await load(), createdEventIds: next.filter((e) => !before.has(e.id)).map((e) => e.id),
-      previousEvents: week.events.filter((e) => changedIds.has(e.id)) }
+      previousEvents }
   },
 
   async saveCourse(name, color) {

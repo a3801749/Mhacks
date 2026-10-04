@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { findOpenSlot } from "../src/lib/schedule"
 import { sanitizeScheduleChanges, validateScheduleChanges } from "../src/lib/schedule-validation"
+import { memoryStore } from "../src/lib/store/memory"
+import type { ScheduleChange } from "../src/lib/types"
 import { event, today, week } from "./fixtures"
 
 const now = { date: today, minute: 600 }
@@ -39,6 +41,20 @@ test("stale proposals cannot move completed blocks", () => {
   const change = { action: "move", eventId: "e", date: today, startMin: 800, endMin: 860, reason: "Move" }
   const data = week({ events: [event({ status: "completed" })] })
   assert.throws(() => validateScheduleChanges([change], data), /no longer planned/)
+})
+
+test("the store rechecks stale proposals without partially creating their other blocks", async () => {
+  const initial = await memoryStore.reset(today)
+  const target = initial.events.find((e) => e.kind === "work" && e.status === "planned")!
+  const changes: ScheduleChange[] = [
+    { action: "create", date: today, startMin: 700, endMin: 760, title: "New event", reason: "Add" },
+    { action: "move", eventId: target.id, date: today, startMin: 800, endMin: 860, reason: "Move" },
+  ]
+  const valid = validateScheduleChanges(changes, initial)
+  await memoryStore.logTime(target.id, 15, "Started while Tilly was thinking")
+  const worked = await memoryStore.getWeek(today)
+  await assert.rejects(memoryStore.applyChanges(valid), /no longer planned/)
+  assert.deepEqual((await memoryStore.getWeek(today)).events, worked.events)
 })
 
 test("open-slot search never extends past its waking-hours boundary", () => {

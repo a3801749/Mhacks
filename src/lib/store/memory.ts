@@ -5,6 +5,7 @@ import type { WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
 import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
+import { validateScheduleChanges } from "../schedule-validation"
 
 type Data = Omit<WeekData, "source">
 
@@ -201,6 +202,11 @@ export const memoryStore: Store = {
 
   async applyChanges(changes) {
     const d = current()
+    try {
+      changes = validateScheduleChanges(changes, snapshot(d))
+    } catch (err) {
+      throw new RequestError(err instanceof Error ? err.message : "Your calendar changed. Refresh and try again.", 409)
+    }
     const ids = new Set(d.events.map((e) => e.id))
     const changedIds = new Set(changes.map((c) => c.eventId))
     const previousEvents = d.events.filter((e) => changedIds.has(e.id)).map((e) => ({ ...e }))
