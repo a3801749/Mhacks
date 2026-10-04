@@ -93,6 +93,14 @@ Creating an assignment is the **New assignment** button in the header (top right
 
 No subtitle under the title. Fields: name, course (`CourseField` — free text with a full-width list of every existing course), category, priority, "Estimate (hr)", dates, progress slider (edit only), notes, pin. The bottom line shows the likely total, or the uncertain sentence.
 
+## Courses and class times
+
+**New course** in the header or Overview opens `course-dialog.tsx`. A course can be saved on its own with a color. Optional lecture, discussion, lab, and other class times become independent weekly personal-event series until the last day of class. Saving a course does not require an assignment.
+
+`courseList` merges the saved catalog with courses named by assignments. `courseKey` ignores casing and repeated whitespace; use it for filters, overview rows, analytics, estimates, and pin habits. Keep the saved course's display name and color in course-level views. The catalog holds at most 100 courses; updates remain allowed at that limit, and omitting a color preserves the existing one. Removing a catalog entry does not delete assignments or class events.
+
+`CourseField` supports arrow-key selection with `aria-activedescendant` and offers to create a typed name only when it does not already exist.
+
 ## Agenda
 
 `agenda-view.tsx` + `schedule-dialog.tsx`.
@@ -104,7 +112,7 @@ No subtitle under the title. Fields: name, course (`CourseField` — free text w
 
 ## Plan, Analytics, and Timeline controls
 
-- Plan creates through the same `BlockForm` as Today and Agenda. The manual form comes first. `aiPlannerEnabled` controls availability of a collapsed Tilly section; expansion starts the request, closing cancels it, and editing the time window invalidates old suggestions. `/api/plan` rejects disabled suggestions. Grid movement/resizing edits one occurrence at a time, preserves actual time, snaps to 15 minutes, and offers keyboard controls. Overlaps use separate lanes. Bulk series edits are in the detail editor.
+- Plan creates through the same `BlockForm` as Today and Agenda. Previous/next arrows change the displayed week; **Add a block** starts in that week when browsing away from the current one. The manual form comes first. `aiPlannerEnabled` controls availability of a collapsed Tilly section; expansion starts the request, closing cancels it, and editing the time window invalidates old suggestions. `/api/plan` rejects disabled suggestions. Grid movement/resizing edits one occurrence at a time, preserves actual time, snaps to 15 minutes, and offers keyboard controls. Overlaps use separate lanes. Bulk series edits are in the detail editor.
 - Analytics keeps the `/rhythm` URL for existing links. It leads with focused time, active days, average per active day, and blocks with logged time. `analyticsPatternsEnabled` hides local heuristic observations independently; no model request is involved. The wind-down rings and explanatory blurbs are removed; axis labels and tooltips retain units.
 - Timeline has no booked-work dots. Due dates can be edited with a date field or the bar’s right handle (arrows = one day, Shift = one week). The axis stays stable during a drag and rescales after save. Due dates cannot precede assigned dates.
 
@@ -123,6 +131,8 @@ Neon stores definitions in `event_series.definition` JSONB. Occurrence uniquenes
 Types: `src/lib/types.ts`. SQL: `db/schema.sql`. The app applies the SQL itself on the first Neon request (`src/lib/store/neon.ts` strips `--` comments, then splits on `;`). Do not put a semicolon inside a string literal or use `DO $$` blocks.
 
 `projects` (assignments): `course`, `type`, `priority`, `notes` (max 2000 via the API), `pinned`, `pin_count`, `pin_order`, `target_minutes`, `assigned_date`, `due_date`, `progress_percent` (null until the user reports it), `completed_date`.
+
+`courses`: standalone `name` and `color`, unique per user ignoring case. API writes normalize whitespace. `WeekData.courses` returns the saved catalog; assignment course names remain strings.
 
 A newly pinned assignment goes to the end of the pinned list (`pin_order` = max + 1). `pin_count` increments only on the transition from unpinned to pinned (memory store and the Neon `UPDATE`). Un-pinning does not decrement it. That history is what the planner learns from, so do not reset it when the user unpins.
 
@@ -155,7 +165,11 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 `sanitizeScheduleChanges` in `schedule-validation.ts` checks real assignment/task ids, positive intervals, local dates, past destinations, waking hours (8am–10pm; personal events the user asks for may run 6am–midnight), and overlaps, including within a batch. Changes that clash are retried after the rest of the batch is applied, because models often list a requested event before the move that frees its slot; a requested personal event that still overlaps is kept and flagged in the preview. For explicit scheduling requests, `parseScheduleRequest` (`fallback.ts`) fills in a create the model left incomplete or dropped, and `makeRoom` proposes moves for blocks it lands on. Both Gemini and local proposals go through it. The apply API validates references and intervals again and rejects stale proposals targeting a block that is no longer planned. Manual scheduling still permits overlaps and unassigned focus blocks.
 
-Schedule application returns `createdEventIds` and `previousEvents` for that operation. Tilly applies and undoes each proposed change on its own (`proposal-card.tsx`): newly added blocks are deleted and existing blocks restore their times, status, and original move history. A new block with logged work cannot be deleted. Failures leave the turn available for retry instead of falsely marking it undone.
+`withRequestedEvent` fills only the requested event, preserving unrelated creates. Explicitly negated and hypothetical scheduling messages do not force an event; the offline fallback leaves the calendar alone for these messages. Its reply identifies any overlap that remains after proposed moves.
+
+After the model returns, `/api/schedule/adjust` reloads the calendar and current guidance before sanitizing or applying changes. Both stores validate again at the write boundary. Neon locks affected rows and compares them to the read snapshot inside the transaction; concurrent completion, deletion, logging, or edits reject the entire batch with 409.
+
+Schedule application returns `createdEventIds` and `previousEvents` for that operation. Tilly applies and undoes each proposed change on its own (`proposal-card.tsx`); `proposals.ts` matches created blocks by their full identity and records the calendar immediately before each item. Newly added blocks are deleted and existing blocks restore their times, status, and original move history. A new block with logged work cannot be deleted. Undo rejects later time/status changes to the same block; undo the later proposal first. Logged work remains intact and determines the restored status. Failures leave the turn available for retry instead of falsely marking it undone.
 
 Guidance prompt text is `MODE_RULES` in `prompts.ts`. Lighthouse is still the `coach` key there.
 
@@ -170,6 +184,7 @@ Client mutations go through `src/hooks/use-week.ts` and are serialized; stale lo
 | Route | Method | Body / behavior |
 | --- | --- | --- |
 | `/api/week?today=` | GET | Full `WeekData` plus integration flags; optional `through` extends recurrence generation |
+| `/api/courses` | POST / DELETE | Save `{ name, color?, today }` or remove `{ name, today }` from the catalog |
 | `/api/events/:id` | PATCH / DELETE | Edit title, status, date, duration, details, safe associations, or move history; delete an unworked block for Undo |
 | `/api/event-series` | POST | Create series or convert one unworked personal event |
 | `/api/events/:id/series` | PATCH / DELETE | Scoped series edit or this/following/all deletion |
@@ -177,7 +192,7 @@ Client mutations go through `src/hooks/use-week.ts` and are serialized; stale lo
 | `/api/logs/:id` | PATCH / DELETE | Edit `{ minutes, note }` or remove a trail entry; the event's actual time follows |
 | `/api/projects/pin-order` | PUT | `{ ids }` in display order |
 | `/api/tasks/:id` | PATCH | `{ done }` |
-| `/api/projects` | POST | create assignment + first task |
+| `/api/projects` | POST | create assignment + first task; client sends `today` for initial store setup |
 | `/api/projects/:id` | PATCH | name, course, type, priority, notes, pinned, dates, target, progress, completedDate |
 | `/api/checkins` | PUT | `{ date, rating, note }` upsert |
 | `/api/plan` | POST | `{ date, startMin, endMin, today }` → breakdown (403 when disabled) |
@@ -213,6 +228,7 @@ Not built. Settings cannot turn it on (`screenTimeEnabled: false` in the setting
 - `docs/onboarding.md` — why `/welcome` is shaped the way it is
 - `docs/demo-walkthrough.md` — click path for a demo
 - `docs/planning-changes.md` — planning-review changes, verification actions, and tradeoffs
+- `docs/product-readiness-review.md` — incoming commit review, corrective commits, checks, and remaining limits
 - `docs/screen-time-extension.md` — future extension
 
 ## Running and checking

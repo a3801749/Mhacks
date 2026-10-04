@@ -14,12 +14,12 @@ Assignments own estimates and reported progress; blocks reserve time and record 
 | **Task-integrated blocks** | Edit block title/date/duration, see logged time, edit the progress trail, and report total assignment progress. Change the assignment’s due date or estimate from the same dialog | `block-dialog.tsx` |
 | **Adaptive estimates** | Time left comes from your reported progress and pace, blended with how long finished assignments of the same course + type really took | `estimateProject()` in `src/lib/analytics.ts` |
 | **Daily check-in** (opt-in) | One tap, 1–10, once a day. Feeds "after late nights you rate your day 4.4 vs 7.2" style insights | `check-in-card.tsx`, `moodCorrelation()` |
-| **Plan** | Your Week: create manually, move existing blocks between days, resize, and optionally open Tilly’s suggestions below the manual form, adding any of them one at a time or all together | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
+| **Plan** | Browse previous and upcoming weeks, create manually, move existing blocks between days, resize, and optionally open Tilly’s suggestions below the manual form, adding any of them one at a time or all together | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
 | **Analytics** | Focused-time stat boxes, work by time of day, optional locally calculated patterns, and estimate accuracy | `rhythm-view.tsx` |
 | **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, short pace labels, and direct due-date editing through draggable edges or date fields | `timeline-view.tsx` |
 | **Looking back** | Planned vs actual by day and time of day, plus optional Tilly Insights (Gemini or the local engine) with a visibility switch and refresh button: patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
 | **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead", "schedule dinner with Sam at 8pm Wednesday"); a fast Gemini lite model negotiates, ElevenLabs speaks. Requested events are created along with the moves that make room. Apply, leave out, or undo each change separately, with a preview of the affected days | `voice-agent.tsx`, `proposal-card.tsx` |
-| **Classes** | “Add class” in the header or the Overview rail: a course with weekly lectures, sections, and labs (days, times, room) until the last day of class | `course-dialog.tsx` |
+| **Courses** | “New course” in the header or the Overview rail: save a course and color, with optional weekly lectures, sections, and labs (days, times, room) until the last day of class | `course-dialog.tsx`, `course-field.tsx` |
 | **Guidance modes** | *Anchor* (strict baseline), *Lighthouse* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
 
 Personal events support location, meeting links, notes, and custom daily/weekly/monthly/yearly repeats. Edit or delete one occurrence, following occurrences, or a whole series.
@@ -63,7 +63,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 - **Gemini system prompts** live in `src/lib/ai/prompts.ts`. The adjust prompt takes `{ now, schedule, projects, tasks, stats, conversation, message }`
   and returns `{ reply, changes[] }` via a JSON response schema. Changes are validated server-side
   (`src/lib/ai/engine.ts`) so hallucinated ids or edits to the past are dropped.
-- **Neon schema** is in `db/schema.sql` — `users`, `projects` (assignments with course, category, priority, notes, pin, progress), `tasks`,
+- **Neon schema** is in `db/schema.sql` — `users`, `courses` (standalone names and colors), `projects` (assignments with course, category, priority, notes, pin, progress), `tasks`,
   `events` (scheduled start/end, `actual_minutes`, event details and exceptions), `event_series` (recurrence definitions), an editable, signed `time_logs` time series, and `check_ins`.
 - **Demo data** (`src/lib/seed.ts`) includes a month of history: finished assignments that train the estimate model,
   a late-night drift on the thesis, and daily ratings that dip after late nights.
@@ -75,7 +75,8 @@ The settings dialog (top-right mode button) shows which services are live and ha
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/api/week?today=YYYY-MM-DD` | GET | Projects, tasks, events, recurrence series, logs, settings, integration status; optional `through` expands recurring events for a future month |
+| `/api/week?today=YYYY-MM-DD` | GET | Projects, courses, tasks, events, recurrence series, logs, settings, integration status; optional `through` expands recurring events for a future month |
+| `/api/courses` | POST / DELETE | Save `{ name, color?, today }` or remove `{ name, today }` from the standalone catalog |
 | `/api/events/:id` | PATCH / DELETE | Edit title, date, duration, details or status; remove an unworked block for Undo |
 | `/api/event-series` | POST | Create a repeating personal event; optionally convert an unworked event |
 | `/api/events/:id/series` | PATCH / DELETE | Edit following/all occurrences, or delete this/following/all |
