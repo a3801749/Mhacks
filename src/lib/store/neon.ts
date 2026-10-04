@@ -202,7 +202,7 @@ async function saveSeriesState(before: WeekData, next: Pick<WeekData, "events" |
   const dirty = next.events.filter((e) => previous.get(e.id) !== JSON.stringify(e))
   try {
   await sql.transaction([
-    sql`SELECT pg_advisory_xact_lock(hashtext(${`tilly-calendar:${USER_ID}`}))`,
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
     sql`SELECT 1 / CASE WHEN COALESCE((SELECT jsonb_object_agg(id, definition) FROM event_series WHERE user_id = ${USER_ID}), '{}'::jsonb)
       = ${JSON.stringify(Object.fromEntries(before.series.map((s) => [s.id, s])))}::jsonb THEN 1 ELSE 0 END AS unchanged`,
     sql`WITH expected AS (
@@ -242,7 +242,7 @@ export const neonStore: Store = {
       if (!added.length) return week
       const { sql } = client()
       await sql.transaction([
-        sql`SELECT pg_advisory_xact_lock(hashtext(${`tilly-calendar:${USER_ID}`}))`,
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
         sql`INSERT INTO events
           (id, user_id, title, date, start_min, end_min, kind, location, meeting_url, notes, series_id, occurrence_date)
           SELECT e.id, ${USER_ID}, e.title, e.date, e.start_min, e.end_min, 'life', e.location, e.meeting_url, e.notes, e.series_id, e.occurrence_date
@@ -355,7 +355,7 @@ export const neonStore: Store = {
     const { sql } = client()
     const has = (key: keyof EventPatch) => Object.prototype.hasOwnProperty.call(patch, key)
     const result = await sql.transaction([
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`tilly-calendar:${USER_ID}`}))`,
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
       sql`WITH updated AS (UPDATE events SET
         status = CASE WHEN COALESCE(${patch.status ?? null}, status) = 'skipped' THEN 'skipped'
           WHEN ${patch.status === "completed"} THEN 'completed'
@@ -445,7 +445,7 @@ export const neonStore: Store = {
     const before = new Map(week.events.map((e) => [e.id, JSON.stringify(e)]))
     const dirty = next.filter((e) => before.get(e.id) !== JSON.stringify(e))
     if (dirty.length > 0) await sql.transaction([
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`tilly-calendar:${USER_ID}`}))`,
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`tide-calendar:${USER_ID}`}))`,
       ...[...new Set(dirty.map((e) => e.seriesId).filter((id) => id !== null))].map((id) => sql`UPDATE event_series
         SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1)) WHERE id = ${id}`),
       insertEvents(sql, dirty),

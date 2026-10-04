@@ -1,6 +1,6 @@
-# Tilly — a reflective calendar
+# Tide — a reflective calendar
 
-Tilly looks back before it plans ahead. Instead of a rigid forward grid, it shows how you **actually** spent your time,
+Tide looks back before it plans ahead. Instead of a rigid forward grid, it shows how you **actually** spent your time,
 ties tasks directly to work blocks, and has a voice companion (Tilly) you can talk to when your day blows up.
 Assignments own estimates and reported progress; blocks reserve time and record what happened. Tilly’s suggestions are optional.
 

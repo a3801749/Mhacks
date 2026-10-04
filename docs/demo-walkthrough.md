@@ -4,14 +4,14 @@ A script for showing how the platform works, for teammates or a 3–4 minute hac
 week, so it runs without any API keys (Gemini, ElevenLabs and Neon just make it real).
 
 **Before you start:** `npm run dev`, open http://localhost:4317, then in Settings click **Reset demo week**. To show
-onboarding, clear the flag first: in the browser console, run `localStorage.removeItem("tilly:onboarded")`.
+onboarding, clear the flag first: in the browser console, run `localStorage.removeItem("tide:onboarded")`.
 
 ---
 
 ### 1. The problem (15s)
 
 > "Weekly reflection is great advice nobody follows, because it means going back through your calendar and adding up
-> hours by hand. Tilly does the tallying so reflecting takes seconds."
+> hours by hand. Tide does the tallying so reflecting takes seconds."
 
 ### 2. Onboarding (40s) — `/welcome`
 

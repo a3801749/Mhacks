@@ -6,7 +6,7 @@
 ## What it does for the user
 
 During a planned work block, a browser extension records **which sites are in the active tab** and **whether the
-person is actually at the computer**. When the block ends, Tilly gets per-domain totals for that block:
+person is actually at the computer**. When the block ends, Tide gets per-domain totals for that block:
 
 | | |
 | --- | --- |
@@ -16,7 +16,7 @@ person is actually at the computer**. When the block ends, Tilly gets per-domain
 | instagram.com | 8m (drift) |
 | idle | 14m |
 
-From that, Tilly can:
+From that, Tide can:
 
 1. **Log real focused time automatically.** A 2-hour block becomes "1h 24m on task" instead of the user typing it in.
 2. **Make estimates more honest.** The adaptive estimate (`estimateProject()` in `src/lib/analytics.ts`) uses focused
@@ -46,12 +46,12 @@ It is **opt-in**, shows up in onboarding step 2 and in Settings, and should be e
 │   • buckets kept in chrome.storage.local: { blockId, domain → minutes }         │
 │                                                                                 │
 │  popup.html  → shows the current block, live totals, Pause button               │
-│  options.html → pair with Tilly (paste a token), domain category overrides       │
+│  options.html → pair with Tide (paste a token), domain category overrides       │
 └───────────────┬─────────────────────────────────────────────────────────────────┘
                 │ GET  /api/screen-time/active-block   (which block is running now?)
                 │ POST /api/screen-time/usage          (totals when the block ends)
                 ▼
-┌──────────────────────────── Tilly (Next.js) ────────────────────────────────────┐
+┌──────────────────────────── Tide (Next.js) ────────────────────────────────────┐
 │  route handlers → store → Neon table screen_time_usage                          │
 │  analytics: focusSummary(), focused minutes feed estimates and Rhythm           │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -79,9 +79,9 @@ extension/
 ```json
 {
   "manifest_version": 3,
-  "name": "Tilly — focus tracker",
+  "name": "Tide — focus tracker",
   "version": "0.1.0",
-  "description": "Counts which sites you use during your Tilly work blocks. Domains only, opt-in.",
+  "description": "Counts which sites you use during your Tide work blocks. Domains only, opt-in.",
   "permissions": ["tabs", "idle", "alarms", "storage"],
   "host_permissions": ["http://localhost:4317/*"],
   "background": { "service_worker": "background.js", "type": "module" },
@@ -231,7 +231,7 @@ The extension calls the API from its own origin, so the routes need CORS headers
 ### 7. Test it
 
 1. Load the unpacked extension and pair it with a token.
-2. In Tilly, create a block that started a few minutes ago (Plan page).
+2. In Tide, create a block that started a few minutes ago (Plan page).
 3. Browse a mix of sites for 5 minutes, then let it idle for 2.
 4. End the block early by editing its end time, then check `screen_time_usage` in Neon (or the in-memory store) and
    open the block dialog.

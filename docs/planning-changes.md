@@ -18,7 +18,7 @@ The main product boundary is unchanged: assignments own estimates and reported c
 | Today | Balanced gap spacing, correct overlap frontier, visible add controls after the final block and in valid gaps | Empty time should be usable, including on touch devices. Nested overlaps should not produce a false gap. |
 | Overview / Looking Back | Visible scroll tracks with content gutters; consistent heading style and size | Long lists remain navigable without covering their text. |
 | Analytics | Rename the visible page/nav, add focused-time stat boxes, remove the screen-time blurb and wind-down rings | The view should explain recorded work without suggesting an unavailable screen-time integration. Units remain in axes and tooltips. Existing `/rhythm` links still work. |
-| Small UI details | Larger Agenda key, styled select menus with inset chevrons, matching Tilly favicon, updated onboarding/tour text | Fix specific legibility and consistency problems without replacing the app’s design. |
+| Small UI details | Larger Agenda key, styled select menus with inset chevrons, matching Tide favicon, updated onboarding/tour text | Fix specific legibility and consistency problems without replacing the app’s design. |
 | Booked totals | Count both focus blocks and personal events; exclude skipped entries | Restoring a three-hour event now restores “3h booked” instead of leaving the day “open.” This total is reserved duration, not focused work. |
 
 ## Where to try the changes

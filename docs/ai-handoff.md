@@ -1,8 +1,8 @@
-# Tilly — handoff for coding agents
+# Tide — handoff for coding agents
 
 Read this before changing product behavior. `AGENTS.md` points here. Human-facing setup is in the root `README.md`.
 
-Tilly is a reflective calendar for students, and Tilly is also the name of its scheduling companion. The product rule is: the model compiles what happened; the person does the reflecting. Copy stays short. The UI is a normal student tool — flat background, modest corners, no full-page gradient, no decorative wave fills on progress bars.
+Tide is a reflective calendar for students. **Tilly** is the scheduling companion. The product rule is: the model compiles what happened; the person does the reflecting. Copy stays short. The UI is a normal student tool — flat background, modest corners, no full-page gradient, no decorative wave fills on progress bars.
 
 ## Names that do not match the code
 

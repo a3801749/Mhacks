@@ -139,7 +139,7 @@ export function SettingsDialog({
           onClick={() => {
             onOpenChange(false)
             // Same-page navigation does not remount the wizard, so tell it to start over.
-            window.dispatchEvent(new Event("tilly:replay-welcome"))
+            window.dispatchEvent(new Event("tide:replay-welcome"))
           }}
           className="text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
