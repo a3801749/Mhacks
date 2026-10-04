@@ -41,6 +41,34 @@ test("deleting an addition that supports a later removal is rejected", async () 
   assertLedger(await memoryStore.getWeek("2026-10-03"), 0)
 })
 
+test("a note edit does not un-skip a block or change its total", async () => {
+  const added = await memoryStore.logTime(eventId, 25, "original")
+  const log = added.logs.at(-1)!
+  await memoryStore.updateEvent(eventId, { status: "skipped" })
+  const week = await memoryStore.updateLog(log.id, { minutes: 25, note: "renamed" })
+  const event = week.events.find((e) => e.id === eventId)!
+  assert.equal(event.status, "skipped")
+  assert.equal(event.actualMinutes, 25)
+  assert.equal(week.logs.find((l) => l.id === log.id)!.note, "renamed")
+})
+
+test("marking a partly logged block done stays done", async () => {
+  await memoryStore.logTime(eventId, 15, "")
+  const week = await memoryStore.updateEvent(eventId, { status: "completed" })
+  assert.equal(week.events.find((e) => e.id === eventId)!.status, "completed")
+  assert.equal(week.events.find((e) => e.id === eventId)!.actualMinutes, 15)
+})
+
+test("focused time cannot be logged on a personal event", async () => {
+  const life = (await memoryStore.getWeek("2026-10-03")).events.find((e) => e.kind === "life")!
+  await assert.rejects(memoryStore.logTime(life.id, 15, ""), /focus blocks/)
+})
+
+test("impossible check-in dates are rejected", async () => {
+  await assert.rejects(memoryStore.saveCheckIn("2026-02-31", 5, ""), /Invalid date/)
+  await assert.rejects(memoryStore.saveCheckIn("2026-10-03", 0, ""), /1–10/)
+})
+
 test("editing and deleting signed entries preserve the block total and status", async () => {
   const added = await memoryStore.logTime(eventId, 60, "")
   const addition = added.logs.at(-1)!

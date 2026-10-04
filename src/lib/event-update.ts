@@ -36,7 +36,13 @@ export function validateEventPatch(value: unknown, data: WeekData, id: string): 
     if (!["work", "life"].includes(body.kind) || event.seriesId && body.kind !== "life") throw new RequestError("Invalid block kind")
     patch.kind = body.kind
   }
-  for (const key of ["projectId", "taskId"] as const) if (body[key] !== undefined) patch[key] = body[key]
+  for (const key of ["projectId", "taskId"] as const) {
+    if (body[key] !== undefined) {
+      const value = body[key]
+      if (value !== null && (typeof value !== "string" || !value)) throw new RequestError("Unknown assignment or task")
+      patch[key] = value
+    }
+  }
   const taskId = patch.taskId === undefined ? event.taskId : patch.taskId
   const projectId = patch.projectId === undefined ? event.projectId : patch.projectId
   const task = taskId === null ? null : data.tasks.find((t) => t.id === taskId)

@@ -1,11 +1,10 @@
 import { buildSeed } from "../seed"
 import { applyChanges, statusForActual } from "../schedule"
-import { toDateKey } from "../time"
+import { addDays, toDateKey, validDate } from "../time"
 import type { WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
 import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
-import { addDays } from "../time"
 
 type Data = Omit<WeekData, "source">
 
@@ -53,7 +52,7 @@ export const memoryStore: Store = {
     const d = current()
     const log = d.logs.find((l) => l.id === logId)
     if (!log) throw new Error("Log entry not found")
-    if (patch.minutes != null) {
+    if (patch.minutes != null && patch.minutes !== log.minutes) {
       const event = d.events.find((e) => e.id === log.eventId)
       if (event) {
         const before = event.actualMinutes
@@ -103,13 +102,22 @@ export const memoryStore: Store = {
       const series = d.series.find((s) => s.id === event.seriesId)
       if (series) series.revision = (series.revision ?? 0) + 1
     }
-    if (event.actualMinutes > 0 && (patch.status !== undefined || patch.startMin !== undefined || patch.endMin !== undefined) && event.status !== "skipped") event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+    // Logged time normally decides status. Skip and an explicit "done" are the overrides; resizing still derives.
+    if (patch.status !== "completed" && event.actualMinutes > 0 && (patch.status !== undefined || patch.startMin !== undefined || patch.endMin !== undefined) && event.status !== "skipped") {
+      event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+    }
     return snapshot(d)
   },
 
   async createSeries(input, today, replaceEventId) {
     const d = current()
-    if (replaceEventId) d.events = d.events.filter((e) => e.id !== replaceEventId)
+    if (replaceEventId) {
+      const event = d.events.find((e) => e.id === replaceEventId)
+      if (!event || event.seriesId || event.kind !== "life" || event.status !== "planned" || event.actualMinutes > 0 || d.logs.some((l) => l.eventId === replaceEventId)) {
+        throw new RequestError("Only an unworked personal event can be converted into a repeating series")
+      }
+      d.events = d.events.filter((e) => e.id !== replaceEventId)
+    }
     d.series.push({ ...input, id: uid("series"), stopBefore: null, excludedDates: [] })
     d.events = materializeSeries(d.events, d.series, addDays(today, 366))
     return snapshot(d)
@@ -183,6 +191,8 @@ export const memoryStore: Store = {
   },
 
   async saveCheckIn(date, rating, note) {
+    if (!validDate(date)) throw new RequestError("Invalid date")
+    if (!Number.isInteger(rating) || rating < 1 || rating > 10) throw new RequestError("Rating must be 1–10")
     const d = current()
     d.checkIns = [...d.checkIns.filter((c) => c.date !== date), { date, rating, note }]
     return snapshot(d)
@@ -193,7 +203,12 @@ export const memoryStore: Store = {
     const ids = new Set(d.events.map((e) => e.id))
     const changedIds = new Set(changes.map((c) => c.eventId))
     const previousEvents = d.events.filter((e) => changedIds.has(e.id)).map((e) => ({ ...e }))
+    const previousJson = new Map(d.events.map((e) => [e.id, JSON.stringify(e)]))
     d.events = applyChanges(d.events, changes)
+    for (const seriesId of new Set(d.events.filter((e) => e.seriesId && previousJson.get(e.id) !== JSON.stringify(e)).map((e) => e.seriesId!))) {
+      const series = d.series.find((s) => s.id === seriesId)
+      if (series) series.revision = (series.revision ?? 0) + 1
+    }
     return { ...snapshot(d), createdEventIds: d.events.filter((e) => !ids.has(e.id)).map((e) => e.id), previousEvents }
   },
 

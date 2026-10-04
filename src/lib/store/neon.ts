@@ -5,7 +5,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
 import { buildSeed } from "../seed"
 import { applyChanges } from "../schedule"
 import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
-import { addDays } from "../time"
+import { addDays, validDate } from "../time"
 import type { CalendarEvent, EventSeries, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
@@ -259,12 +259,12 @@ export const neonStore: Store = {
   async logTime(eventId, minutes, note) {
     const { sql } = client()
     // Lock the block and commit its total and ledger entry in one statement.
-    const rows = await sql`
+    const [row] = await sql`
       WITH event AS (
-        SELECT id, task_id, actual_minutes, end_min - start_min AS length FROM events
-        WHERE id = ${eventId} AND user_id = ${USER_ID} AND kind = 'work' FOR UPDATE
+        SELECT id, task_id, kind, actual_minutes, end_min - start_min AS length FROM events
+        WHERE id = ${eventId} AND user_id = ${USER_ID} FOR UPDATE
       ), totals AS (
-        SELECT event.*, GREATEST(0, actual_minutes + ${minutes}) AS actual FROM event
+        SELECT event.*, GREATEST(0, actual_minutes + ${minutes}) AS actual FROM event WHERE kind = 'work'
       ), changed AS (
         UPDATE events e SET actual_minutes = totals.actual,
           status = CASE WHEN totals.actual = 0 THEN 'planned'
@@ -276,8 +276,9 @@ export const neonStore: Store = {
         SELECT ${`l-${randomUUID()}`}, task_id, id, applied, ${note} FROM changed
         WHERE task_id IS NOT NULL AND applied <> 0
         RETURNING id
-      ) SELECT id FROM changed`
-    if (rows.length === 0) throw new Error("Event not found")
+      ) SELECT (SELECT id FROM event) AS id, (SELECT kind FROM event) AS kind`
+    if (!row?.id) throw new Error("Event not found")
+    if (row.kind !== "work") throw new RequestError("Focused time can only be logged on focus blocks")
     return load()
   },
 
@@ -299,13 +300,13 @@ export const neonStore: Store = {
         )
         RETURNING l.id, l.event_id, l.minutes - entry.minutes AS delta
       ), totals AS (
-        SELECT event.*, GREATEST(0, event.actual_minutes + changed.delta) AS actual
+        SELECT event.*, changed.delta, GREATEST(0, event.actual_minutes + changed.delta) AS actual
         FROM event JOIN changed ON changed.event_id = event.id
       ), shifted AS (
         UPDATE events e SET actual_minutes = totals.actual,
           status = CASE WHEN totals.actual = 0 THEN 'planned'
                         WHEN totals.actual >= totals.length THEN 'completed' ELSE 'partial' END
-        FROM totals WHERE e.id = totals.id RETURNING e.id
+        FROM totals WHERE e.id = totals.id AND totals.delta <> 0 RETURNING e.id
       ) SELECT (SELECT id FROM entry) AS id, EXISTS (SELECT 1 FROM changed) AS applied`
     if (!result.id) throw new Error("Log entry not found")
     if (!result.applied) throw new RequestError("This edit would make the block's logged time negative. Adjust its removal entries first.", 409)
@@ -357,6 +358,7 @@ export const neonStore: Store = {
       sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
       sql`WITH updated AS (UPDATE events SET
         status = CASE WHEN COALESCE(${patch.status ?? null}, status) = 'skipped' THEN 'skipped'
+          WHEN ${patch.status === "completed"} THEN 'completed'
           WHEN actual_minutes > 0 AND (${patch.status != null} OR ${patch.startMin != null} OR ${patch.endMin != null})
           THEN CASE WHEN actual_minutes >= COALESCE(${patch.endMin ?? null}::int, end_min) - COALESCE(${patch.startMin ?? null}::int, start_min) THEN 'completed' ELSE 'partial' END
           ELSE COALESCE(${patch.status ?? null}, status) END,
@@ -390,6 +392,12 @@ export const neonStore: Store = {
 
   async createSeries(input, today, replaceEventId) {
     const before = await load()
+    if (replaceEventId) {
+      const event = before.events.find((e) => e.id === replaceEventId)
+      if (!event || event.seriesId || event.kind !== "life" || event.status !== "planned" || event.actualMinutes > 0 || before.logs.some((l) => l.eventId === replaceEventId)) {
+        throw new RequestError("Only an unworked personal event can be converted into a repeating series")
+      }
+    }
     const series: EventSeries = { ...input, id: `series-${randomUUID()}`, stopBefore: null, excludedDates: [] }
     const next = { series: [...before.series, series], events: materializeSeries(before.events.filter((e) => e.id !== replaceEventId), [series], addDays(today, 366)) }
     await saveSeriesState(before, next)
@@ -424,7 +432,9 @@ export const neonStore: Store = {
 
   async setTaskDone(taskId, done) {
     const { sql } = client()
-    await sql`UPDATE tasks SET done = ${done} WHERE id = ${taskId}`
+    const rows = await sql`UPDATE tasks t SET done = ${done} FROM projects p
+      WHERE t.id = ${taskId} AND t.project_id = p.id AND p.user_id = ${USER_ID} RETURNING t.id`
+    if (rows.length === 0) throw new Error("Task not found")
     return load()
   },
 
@@ -483,7 +493,7 @@ export const neonStore: Store = {
   async createProject(input) {
     const { sql } = client()
     const [{ count }] = await sql`SELECT count(*)::int AS count FROM projects WHERE user_id = ${USER_ID}`
-    const id = `p-${Date.now().toString(36)}`
+    const id = `p-${randomUUID()}`
     await sql.transaction([
       sql`INSERT INTO projects (id, user_id, name, color, course, type, priority, notes, target_minutes,
                                 assigned_date, due_date)
@@ -491,12 +501,14 @@ export const neonStore: Store = {
                   ${input.type}, ${input.priority ?? "completion"}, ${input.notes ?? ""}, ${input.targetMinutes},
                   ${input.assignedDate}, ${input.dueDate})`,
       sql`INSERT INTO tasks (id, project_id, title, estimate_minutes)
-          VALUES (${`t-${Date.now().toString(36)}`}, ${id}, ${input.firstTask}, ${input.targetMinutes})`,
+          VALUES (${`t-${randomUUID()}`}, ${id}, ${input.firstTask}, ${input.targetMinutes})`,
     ])
     return load()
   },
 
   async saveCheckIn(date, rating, note) {
+    if (!validDate(date)) throw new RequestError("Invalid date")
+    if (!Number.isInteger(rating) || rating < 1 || rating > 10) throw new RequestError("Rating must be 1–10")
     const { sql } = client()
     await sql`INSERT INTO check_ins (user_id, date, rating, note) VALUES (${USER_ID}, ${date}, ${rating}, ${note})
               ON CONFLICT (user_id, date) DO UPDATE SET rating = EXCLUDED.rating, note = EXCLUDED.note`

@@ -117,12 +117,14 @@ export function changeSeries(data: WeekData, eventId: string, input: NewSeries, 
   const original = data.series.find((s) => s.id === event?.seriesId)
   if (!event || !original || !event.occurrenceDate) throw new RequestError("Repeating event not found", 404)
   const cutoff = scope === "following" ? event.occurrenceDate : original.startDate
-  const delta = daysBetween(scope === "following" ? event.occurrenceDate : original.startDate, input.startDate)
-  // A fresh generation avoids ID collisions with preserved, shifted exceptions.
+  // Following edits measure the shift from where this occurrence sits now. A moved
+  // exception's calendar date is not a new series anchor.
+  const shift = scope === "following" ? daysBetween(event.date, input.startDate) : daysBetween(original.startDate, input.startDate)
   const id = newId
-  const updated: EventSeries = { ...input, id, stopBefore: original.stopBefore ? addDays(original.stopBefore, delta) : null,
-    excludedDates: original.excludedDates.filter((date) => date >= cutoff).map((date) => addDays(date, delta)) }
-  // Keep the remaining count when splitting a count-ended series with an unchanged rule.
+  const startDate = scope === "following" ? addDays(event.occurrenceDate, shift) : input.startDate
+  const updated: EventSeries = { ...input, startDate, id, stopBefore: original.stopBefore ? addDays(original.stopBefore, shift) : null,
+    excludedDates: [...new Set(original.excludedDates.filter((date) => date >= cutoff).map((date) => addDays(date, shift)))] }
+  // Keep the remaining count when splitting a count-ended series with an unchanged count.
   if (scope === "following" && input.rule.end.type === "count" && original.rule.end.type === "count" && input.rule.end.count === original.rule.end.count) {
     const before = occurrenceDates({ ...original, excludedDates: [] }, addDays(cutoff, -1)).length
     updated.rule = { ...input.rule, end: { type: "count", count: Math.max(1, input.rule.end.count - before) } }
@@ -130,9 +132,14 @@ export function changeSeries(data: WeekData, eventId: string, input: NewSeries, 
   const series = scope === "all" ? data.series.map((s) => s.id === original.id ? updated : s)
     : [...data.series.map((s) => s.id === original.id ? { ...s, stopBefore: cutoff } : s), updated]
   const events = data.events.flatMap((e) => {
-    if (e.seriesId !== original.id || e.occurrenceDate! < cutoff) return [e]
+    if (e.seriesId !== original.id || !e.occurrenceDate || e.occurrenceDate < cutoff) return [e]
     if (e.date < today || e.actualMinutes > 0 || e.status === "completed" || e.isException) {
-      return [{ ...e, seriesId: id, occurrenceDate: addDays(e.occurrenceDate!, delta), isException: true }]
+      const kept: CalendarEvent = { ...e, seriesId: id, occurrenceDate: addDays(e.occurrenceDate, shift), isException: true }
+      // The occurrence being edited should show the submitted title, time, and date.
+      // Other past, completed, or exception rows stay as they were.
+      if (e.id !== eventId || e.date < today || e.actualMinutes > 0 || e.status === "completed") return [kept]
+      return [{ ...kept, title: input.title, startMin: input.startMin, endMin: input.endMin, location: input.location,
+        meetingUrl: input.meetingUrl, notes: input.notes, date: scope === "following" ? input.startDate : e.date }]
     }
     return []
   })

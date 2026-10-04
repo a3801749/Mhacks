@@ -10,5 +10,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/events/[id]
   if (!Number.isFinite(mins) || mins === 0 || Math.abs(mins) > MAX_LOG_MINUTES) {
     return Response.json({ error: `Log between 1 minute and ${MAX_LOG_MINUTES / 60} hours at a time` }, { status: 400 })
   }
-  return handle(() => getStore().logTime(id, mins, (note ?? "").slice(0, 280)))
+  const text = typeof note === "string" ? note.slice(0, 280) : ""
+  return handle(() => getStore().logTime(id, mins, text))
 }

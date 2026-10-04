@@ -88,6 +88,35 @@ test("invalid rules, unsafe links, and reassignment of recorded work are rejecte
   assert.equal(validateEventPatch({ date: "2026-10-04" }, data, "e").movedFromDate, today)
 })
 
+test("following edit of a moved occurrence keeps the series anchor and shows the new title", () => {
+  const s = series()
+  const events = materializeSeries([], [s], "2026-10-10")
+  events[2] = { ...events[2], date: "2026-10-20", isException: true }
+  const next = changeSeries(week({ series: [s], events }), events[2].id, { ...s, title: "Renamed", startDate: "2026-10-20" }, "following", "split", today)
+  assert.equal(next.series[0].stopBefore, "2026-10-05")
+  assert.equal(next.series[1].startDate, "2026-10-05")
+  assert.equal(next.events.find((e) => e.date === "2026-10-04")?.title, "Seminar")
+  assert.equal(next.events.find((e) => e.date === "2026-10-06")?.title, "Renamed")
+  const moved = next.events.find((e) => e.id === events[2].id)!
+  assert.equal(moved.title, "Renamed")
+  assert.equal(moved.date, "2026-10-20")
+  assert.equal(moved.occurrenceDate, "2026-10-05")
+  assert.equal(next.events.length, 5)
+})
+
+test("only an unworked personal event can be converted into a series", async () => {
+  await memoryStore.reset(today)
+  const data = await memoryStore.getWeek(today)
+  const work = data.events.find((e) => e.kind === "work")!
+  const { id: _id, stopBefore: _stop, excludedDates: _ex, revision: _rev, ...input } = series()
+  await assert.rejects(memoryStore.createSeries(input, today, work.id), /unworked personal event/)
+  const life = data.events.find((e) => e.kind === "life" && e.status === "planned" && e.actualMinutes === 0 && !e.seriesId)!
+  const created = await memoryStore.createSeries(input, today, life.id)
+  assert.equal(created.series.length, 1)
+  assert.ok(!created.events.some((e) => e.id === life.id))
+  assert.ok(created.events.some((e) => e.seriesId === created.series[0].id))
+})
+
 test("a moved exception outside a changed weekday pattern still consumes one occurrence", () => {
   const s = series()
   s.rule = { ...s.rule, frequency: "weekly", weekdays: [1, 3], end: { type: "count", count: 4 } }
