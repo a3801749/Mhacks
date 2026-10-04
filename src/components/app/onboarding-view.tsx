@@ -29,6 +29,7 @@ import { addDays } from "@/lib/time"
 import type { AssignmentType, GuidanceMode } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useApp } from "./app-shell"
+import { courseList } from "@/lib/courses"
 import { CourseField } from "./course-field"
 import { ScreenTimePreview } from "./screen-time-preview"
 import { TillyOrb } from "./voice-agent"
@@ -343,7 +344,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
   const [hours, setHours] = useState("3")
   const [due, setDue] = useState(addDays(today, 7))
   const [saving, setSaving] = useState(false)
-  const courses = [...new Set(data.projects.map((p) => p.course))]
+  const courses = courseList(data).map((c) => c.name)
 
   return (
     <>
@@ -376,7 +377,7 @@ function AssignmentStep({ today, onAdded }: { today: string; onAdded: () => void
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ob-course">Course</Label>
-            <CourseField id="ob-course" value={course} onChange={setCourse} courses={courses} />
+            <CourseField id="ob-course" value={course} onChange={setCourse} courses={courses} onCreate={(name) => api.saveCourse(name, undefined, `Added ${name}`)} />
           </div>
         </div>
         <div className="space-y-1.5">

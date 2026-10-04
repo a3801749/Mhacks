@@ -261,6 +261,7 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
 
   return {
     projects,
+    courses: [],
     tasks: SEED_TASKS.map((t) => ({ ...t })),
     events,
     series: [],

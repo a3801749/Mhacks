@@ -31,6 +31,12 @@ export interface Project {
   completedDate: string | null
 }
 
+/** A course the user added on its own; assignments also name courses by text. */
+export interface Course {
+  name: string
+  color: string
+}
+
 export interface Task {
   id: string
   projectId: string
@@ -120,6 +126,7 @@ export interface CheckIn {
 
 export interface WeekData {
   projects: Project[]
+  courses: Course[]
   tasks: Task[]
   events: CalendarEvent[]
   series: EventSeries[]

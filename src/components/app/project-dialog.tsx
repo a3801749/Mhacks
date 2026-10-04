@@ -14,6 +14,7 @@ import { displayedPercent, estimateProject } from "@/lib/analytics"
 import { addDays, formatDuration, validDate } from "@/lib/time"
 import type { AssignmentType, Priority, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { courseList } from "@/lib/courses"
 import { CourseField } from "./course-field"
 import type { WeekApi } from "@/hooks/use-week"
 
@@ -100,7 +101,7 @@ function ProjectForm({
   const [progress, setProgress] = useState(initialProgress)
   const [saving, setSaving] = useState<"save" | "finish" | null>(null)
   const lock = useRef(false)
-  const courses = [...new Set(data.projects.map((x) => x.course))].sort()
+  const courses = courseList(data).map((c) => c.name)
 
   const progressChanged = !isNew && progress !== initialProgress
   const targetMinutes = !isNew && hours === formatHours(p!.targetMinutes) ? p!.targetMinutes : Math.round(Number(hours) * 60)
@@ -202,7 +203,7 @@ function ProjectForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="pcourse">Course</Label>
-        <CourseField id="pcourse" value={course} onChange={setCourse} courses={courses} />
+        <CourseField id="pcourse" value={course} onChange={setCourse} courses={courses} onCreate={(name) => api.saveCourse(name, undefined, `Added ${name}`)} />
       </div>
 
       <div className="space-y-1.5">

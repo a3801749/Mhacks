@@ -8,7 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SelectField } from "@/components/ui/select-field"
+import { courseList } from "@/lib/courses"
 import { validateSeries } from "@/lib/recurrence"
+import { PROJECT_COLORS } from "@/lib/store/types"
 import { addDays, formatDuration, validDate } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import { useApp } from "./app-shell"
@@ -43,8 +45,8 @@ export function CourseDialog({ open, onClose }: { open: boolean; onClose: () => 
   return <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
       <DialogHeader>
-        <DialogTitle className="font-heading text-xl font-medium">Add a class</DialogTitle>
-        <DialogDescription>Your lectures, sections, and labs repeat every week until the last day of class.</DialogDescription>
+        <DialogTitle className="font-heading text-xl font-medium">New course</DialogTitle>
+        <DialogDescription>File assignments under it and filter by it. Class times are optional and repeat weekly until the last day of class.</DialogDescription>
       </DialogHeader>
       {open && <CourseForm onDone={onClose} />}
     </DialogContent>
@@ -55,8 +57,12 @@ function CourseForm({ onDone }: { onDone: () => void }) {
   const { data, api, today } = useApp()
   const id = useId()
   const nextKey = useRef(1)
-  const courses = [...new Set(data.projects.map((p) => p.course).filter(Boolean))]
+  const known = courseList(data)
+  const courses = known.map((c) => c.name)
+  const used = new Set(known.map((c) => c.color.toLowerCase()))
   const [course, setCourse] = useState("")
+  const [color, setColor] = useState(() => PROJECT_COLORS.find((c) => !used.has(c.toLowerCase())) ?? PROJECT_COLORS[0])
+  const [withTimes, setWithTimes] = useState(false)
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(addDays(today, 7 * 14))
   const [meetings, setMeetings] = useState<Meeting[]>([{ key: 0, type: "Lecture", weekdays: [1, 3], start: "10:00", end: "11:30", location: "" }])
@@ -70,7 +76,8 @@ function CourseForm({ onDone }: { onDone: () => void }) {
     return m.weekdays.length > 0 && s != null && e != null && e > s
   }
   const datesOk = validDate(startDate) && validDate(endDate) && endDate >= startDate
-  const valid = course.trim().length > 0 && datesOk && meetings.every(meetingOk)
+  const name = course.trim().replace(/\s+/g, " ")
+  const valid = name.length > 0 && name.length <= 40 && (!withTimes || datesOk && meetings.every(meetingOk))
   const titleFor = (m: Meeting) => (m.type === "Class" ? course.trim() : `${course.trim()} ${m.type}`).slice(0, 80)
 
   const submit = async (e: React.FormEvent) => {
@@ -80,7 +87,8 @@ function CourseForm({ onDone }: { onDone: () => void }) {
     setError(null)
     let added = 0
     try {
-      for (const m of meetings) {
+      if (!await api.saveCourse(name, color, "")) return
+      for (const m of withTimes ? meetings : []) {
         const input = validateSeries({
           title: titleFor(m), location: m.location, meetingUrl: "", notes: "",
           startDate, startMin: toMinutes(m.start)!, endMin: toMinutes(m.end)!,
@@ -89,7 +97,7 @@ function CourseForm({ onDone }: { onDone: () => void }) {
         if (!await api.createSeries(input, undefined, "")) return
         added++
       }
-      toast.success(`${course.trim()} is on your calendar`)
+      toast.success(withTimes ? `${name} and its class times are on your calendar` : `${name} added`)
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add this class")
@@ -102,8 +110,18 @@ function CourseForm({ onDone }: { onDone: () => void }) {
   return <form onSubmit={submit} className="space-y-4">
     <div className="space-y-1">
       <Label htmlFor={`${id}-course`}>Course</Label>
-      <CourseField id={`${id}-course`} value={course} onChange={setCourse} courses={courses} />
+      <CourseField id={`${id}-course`} value={course} onChange={setCourse} courses={courses} placeholder="EECS 281 or Spanish 102" />
+      {known.some((c) => c.name.toLowerCase() === name.toLowerCase()) && <p className="text-xs text-muted-foreground">{name} already exists; saving updates its color{withTimes ? " and adds these class times" : ""}.</p>}
     </div>
+    <div className="space-y-1">
+      <Label>Color</Label>
+      <div role="radiogroup" aria-label="Course color" className="flex flex-wrap gap-2">
+        {PROJECT_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Color ${c}`}
+          onClick={() => setColor(c)} className={cn("size-7 rounded-full border-2 border-transparent", color === c && "border-foreground")} style={{ backgroundColor: c }} />)}
+      </div>
+    </div>
+    {!withTimes ? <Button type="button" variant="outline" size="sm" onClick={() => setWithTimes(true)}><Plus /> Add class times (lecture, section, lab)</Button> : <>
+    <div className="flex items-center justify-between gap-2 border-t pt-3"><p className="text-sm font-medium">Class times</p><Button type="button" variant="ghost" size="xs" onClick={() => setWithTimes(false)}>Skip class times</Button></div>
     <div className="grid grid-cols-2 gap-2">
       <div className="space-y-1"><Label htmlFor={`${id}-first`}>First day</Label><Input id={`${id}-first`} type="date" value={startDate} required onChange={(e) => setStartDate(e.target.value)} /></div>
       <div className="space-y-1"><Label htmlFor={`${id}-last`}>Last day of class</Label><Input id={`${id}-last`} type="date" value={endDate} min={startDate} required onChange={(e) => setEndDate(e.target.value)} /></div>
@@ -145,7 +163,8 @@ function CourseForm({ onDone }: { onDone: () => void }) {
     <Button type="button" variant="outline" size="sm" disabled={meetings.length >= 5} onClick={() => setMeetings((ms) => [...ms, { key: nextKey.current++, type: "Discussion", weekdays: [5], start: "14:00", end: "15:00", location: "" }])}>
       <Plus /> Add a section or lab
     </Button>
+    </>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <Button type="submit" className="w-full" disabled={!valid || saving}>{saving && <Loader2 className="animate-spin" />}Add class to calendar</Button>
+    <Button type="submit" className="w-full" disabled={!valid || saving}>{saving && <Loader2 className="animate-spin" />}{withTimes ? "Add course and class times" : "Add course"}</Button>
   </form>
 }

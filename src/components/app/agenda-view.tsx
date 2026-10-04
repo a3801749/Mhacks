@@ -10,6 +10,7 @@ import { dayLoad, projectHealth, type Busyness, type Pace } from "@/lib/analytic
 import { addDays, daysBetween, formatRange, fromDateKey, monthDay, toDateKey, weekdayLong, weekdayShort } from "@/lib/time"
 import type { AssignmentType, CalendarEvent, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { courseList } from "@/lib/courses"
 import { useApp } from "./app-shell"
 import { dueText, PaceTag, PinButton, ProgressBar, Tag } from "./assignment-bits"
 import { Segmented } from "./rhythm-view"
@@ -67,7 +68,7 @@ export function AgendaView() {
   const [selected, setSelected] = useState(today)
   const [schedule, setSchedule] = useState<ScheduleDraft | null>(null)
 
-  const allCourses = useMemo(() => [...new Set(data.projects.map((p) => p.course))].sort(), [data.projects])
+  const allCourses = useMemo(() => courseList(data), [data])
   const projectById = useMemo(() => new Map(data.projects.map((p) => [p.id, p])), [data.projects])
 
   const matches = (p: Project | undefined) => {
@@ -157,8 +158,8 @@ export function AgendaView() {
               )}
             </div>
             <ChipRow
-              label="Classes"
-              options={allCourses.map((c) => ({ key: c, label: c, color: data.projects.find((p) => p.course === c)?.color }))}
+              label="Courses"
+              options={allCourses.map((c) => ({ key: c.name, label: c.name, color: c.color }))}
               value={courses}
               onChange={setCourses}
             />

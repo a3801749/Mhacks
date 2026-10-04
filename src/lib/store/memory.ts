@@ -29,6 +29,7 @@ export const memoryStore: Store = {
   async getWeek(today, through) {
     const d = data(today)
     d.series ??= []
+    d.courses ??= []
     d.events = materializeSeries(d.events, d.series, through ?? addDays(today, 366))
     return snapshot(d)
   },
@@ -210,6 +211,21 @@ export const memoryStore: Store = {
       if (series) series.revision = (series.revision ?? 0) + 1
     }
     return { ...snapshot(d), createdEventIds: d.events.filter((e) => !ids.has(e.id)).map((e) => e.id), previousEvents }
+  },
+
+  async saveCourse(name, color) {
+    const d = current()
+    d.courses ??= []
+    const existing = d.courses.find((c) => c.name.toLowerCase() === name.toLowerCase())
+    if (existing) existing.color = color
+    else d.courses.push({ name, color })
+    return snapshot(d)
+  },
+
+  async deleteCourse(name) {
+    const d = current()
+    d.courses = (d.courses ?? []).filter((c) => c.name.toLowerCase() !== name.toLowerCase())
+    return snapshot(d)
   },
 
   async updateSettings(settings) {

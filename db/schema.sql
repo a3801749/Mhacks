@@ -123,3 +123,11 @@ ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_type_check;
 ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_category_check;
 UPDATE projects SET type = 'exam' WHERE type = 'studying';
 UPDATE projects SET type = 'project' WHERE type = 'writing';
+
+-- Courses the user added on their own, before any assignment names them.
+CREATE TABLE IF NOT EXISTS courses (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name    TEXT NOT NULL,
+  color   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS courses_user_name_idx ON courses (user_id, lower(name));

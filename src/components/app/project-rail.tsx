@@ -2,9 +2,10 @@
 
 import { useId, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, GripVertical, Pin, Plus, Sparkles } from "lucide-react"
+import { ArrowRight, GripVertical, Pin, Plus, Sparkles, X } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AGENT_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
+import { courseList } from "@/lib/courses"
 import { pinPreferenceLabel, pinPreferences, projectHealth, type ProjectHealth } from "@/lib/analytics"
 import { formatDue } from "@/lib/time"
 import type { Project, WeekData } from "@/lib/types"
@@ -48,6 +49,8 @@ export function ProjectRail({
       }
     })
     .sort((a, b) => a.next.localeCompare(b.next))
+  const active = new Set(classes.map((c) => c.course.toLowerCase()))
+  const quiet = courseList(data).filter((c) => !active.has(c.name.toLowerCase()))
 
   return (
     <section className={cn("flex min-h-0 flex-col gap-5", className)} aria-labelledby={headingId}>
@@ -65,11 +68,11 @@ export function ProjectRail({
 
       <div className="flex min-h-0 flex-col">
         <div className="flex items-baseline justify-between gap-2">
-          <SectionLabel>Classes</SectionLabel>
-          <AddClassButton />
+          <SectionLabel>Courses</SectionLabel>
+          <NewCourseButton />
         </div>
-        {classes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No open assignments yet. Add your class schedule, or an assignment with “New assignment”.</p>
+        {classes.length === 0 && quiet.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No courses yet. Add one with “New course”, then give it assignments.</p>
         ) : (
           <ScrollArea className={scrollArea}>
             <ul className="divide-y rounded-lg border bg-card">
@@ -86,6 +89,14 @@ export function ProjectRail({
                       {c.tasks} task{c.tasks === 1 ? "" : "s"} · {formatDue(today, c.next)}
                     </span>
                   </Link>
+                </li>
+              ))}
+              {quiet.map((c) => (
+                <li key={c.name} className="group/course flex items-center gap-2.5 px-3 py-2 text-sm">
+                  <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: c.color }} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
+                  <span className="text-xs whitespace-nowrap text-muted-foreground">No open work</span>
+                  {c.standalone && !data.projects.some((p) => p.course.toLowerCase() === c.name.toLowerCase()) && <RemoveCourseButton name={c.name} />}
                 </li>
               ))}
             </ul>
@@ -129,11 +140,23 @@ export function ProjectRail({
   )
 }
 
-function AddClassButton() {
+function NewCourseButton() {
   const { addCourse } = useApp()
   return (
     <button type="button" onClick={addCourse} className="mb-1.5 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-      <Plus className="size-3" /> Add class
+      <Plus className="size-3" /> New course
+    </button>
+  )
+}
+
+function RemoveCourseButton({ name }: { name: string }) {
+  const { api } = useApp()
+  const [busy, setBusy] = useState(false)
+  return (
+    <button type="button" aria-label={`Remove ${name}`} title="Remove this course" disabled={busy}
+      onClick={async () => { setBusy(true); try { await api.deleteCourse(name) } finally { setBusy(false) } }}
+      className="rounded-sm p-0.5 text-muted-foreground opacity-0 group-hover/course:opacity-100 hover:text-foreground focus-visible:opacity-100 disabled:opacity-50 [@media(hover:none)]:opacity-100">
+      <X className="size-3.5" />
     </button>
   )
 }

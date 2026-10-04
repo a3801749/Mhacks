@@ -22,7 +22,7 @@ export function event(patch: Partial<CalendarEvent> = {}): CalendarEvent {
 
 export function week(patch: Partial<WeekData> = {}): WeekData {
   return {
-    source: "memory", projects: [project()],
+    source: "memory", projects: [project()], courses: [],
     tasks: [{ id: "t", projectId: "p", title: "Work", estimateMinutes: 180, done: false }],
     events: [], series: [], logs: [], checkIns: [],
     settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, todayInsightsEnabled: true, analyticsPatternsEnabled: true, screenTimeEnabled: false },

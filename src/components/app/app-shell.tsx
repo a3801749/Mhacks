@@ -91,9 +91,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         )}
         {data && (
-          <Button variant="outline" size="sm" onClick={addCourse} className="gap-1.5" aria-label="Add a class">
+          <Button variant="outline" size="sm" onClick={addCourse} className="gap-1.5" aria-label="New course">
             <GraduationCap />
-            <span className="hidden lg:inline">Add class</span>
+            <span className="hidden lg:inline">New course</span>
           </Button>
         )}
         {data && (

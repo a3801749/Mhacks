@@ -6,7 +6,7 @@ import { buildSeed } from "../seed"
 import { applyChanges } from "../schedule"
 import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
 import { addDays, validDate } from "../time"
-import type { CalendarEvent, EventSeries, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
+import type { CalendarEvent, CheckIn, Course, EventSeries, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
 
@@ -105,7 +105,7 @@ function insertEvents(sql: Sql, events: CalendarEvent[]) {
 
 async function load(): Promise<WeekData> {
   const { sql } = client()
-  const [users, projects, tasks, events, logs, checkIns, series] = await sql.transaction([
+  const [users, projects, tasks, events, logs, checkIns, series, courses] = await sql.transaction([
     sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, today_insights_enabled, analytics_patterns_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
     sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, pin_order, target_minutes, progress_percent,
                to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
@@ -121,10 +121,12 @@ async function load(): Promise<WeekData> {
         WHERE p.user_id = ${USER_ID} ORDER BY l.created_at`,
     sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, rating, note FROM check_ins WHERE user_id = ${USER_ID} ORDER BY date`,
     sql`SELECT definition FROM event_series WHERE user_id = ${USER_ID}`,
+    sql`SELECT name, color FROM courses WHERE user_id = ${USER_ID} ORDER BY lower(name)`,
   ], { isolationLevel: "RepeatableRead", readOnly: true })
   const u = users[0]
   return {
     source: "neon",
+    courses: courses.map((r): Course => ({ name: r.name, color: r.color })),
     series: series.map((r) => r.definition as EventSeries),
     settings: {
       guidanceMode: (u?.guidance_mode ?? "coach") as Settings["guidanceMode"],
@@ -453,6 +455,19 @@ export const neonStore: Store = {
     const changedIds = new Set(changes.map((c) => c.eventId))
     return { ...await load(), createdEventIds: next.filter((e) => !before.has(e.id)).map((e) => e.id),
       previousEvents: week.events.filter((e) => changedIds.has(e.id)) }
+  },
+
+  async saveCourse(name, color) {
+    const { sql } = client()
+    await sql`INSERT INTO courses (user_id, name, color) VALUES (${USER_ID}, ${name}, ${color})
+              ON CONFLICT (user_id, lower(name)) DO UPDATE SET color = EXCLUDED.color`
+    return load()
+  },
+
+  async deleteCourse(name) {
+    const { sql } = client()
+    await sql`DELETE FROM courses WHERE user_id = ${USER_ID} AND lower(name) = lower(${name})`
+    return load()
   },
 
   async updateSettings(settings) {

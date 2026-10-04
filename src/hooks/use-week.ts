@@ -161,6 +161,10 @@ export function useWeek(today: string | null) {
       ),
     createProject: (project: NewProject) =>
       mutate(() => request<WeekData>(`/api/projects`, { method: "POST", body: json(project) }), "Assignment added"),
+    saveCourse: (name: string, color?: string, msg?: string) =>
+      mutate(() => request<WeekData>(`/api/courses`, { method: "POST", body: json({ name, color, today }) }), msg),
+    deleteCourse: (name: string) =>
+      mutate(() => request<WeekData>(`/api/courses`, { method: "DELETE", body: json({ name, today }) }), `Removed ${name}`),
     saveCheckIn: (date: string, rating: number, note: string) =>
       mutate(() => request<WeekData>(`/api/checkins`, { method: "PUT", body: json({ date, rating, note }) }), "Thanks — noted."),
     reset: () =>

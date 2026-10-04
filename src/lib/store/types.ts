@@ -66,6 +66,10 @@ export interface Store {
   updateProject(projectId: string, patch: ProjectPatch): Promise<WeekData>
   createProject(project: NewProject): Promise<WeekData>
   saveCheckIn(date: string, rating: number, note: string): Promise<WeekData>
+  /** Adding an existing name updates its color. */
+  saveCourse(name: string, color: string): Promise<WeekData>
+  /** Assignments keep their course text; only the standalone entry goes. */
+  deleteCourse(name: string): Promise<WeekData>
   applyChanges(changes: ScheduleChange[]): Promise<AppliedWeek>
   updateSettings(settings: Settings): Promise<WeekData>
   reset(today: string): Promise<WeekData>

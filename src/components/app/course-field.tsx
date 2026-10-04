@@ -1,27 +1,31 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
-import { Check, ChevronDown } from "lucide-react"
+import { Check, ChevronDown, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
-/** Free-text course input that always lists every existing course, full width, below the field. */
+/** Course picker: lists every course, and typing a new name offers to create it. */
 export function CourseField({
   id,
   value,
   onChange,
   courses,
+  onCreate,
   placeholder = "EECS 281",
 }: {
   id: string
   value: string
   onChange: (v: string) => void
   courses: string[]
+  /** Called when the user picks "Create course" for a name not in the list. */
+  onCreate?: (name: string) => void
   placeholder?: string
 }) {
   const listId = useId()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
+  const [typing, setTyping] = useState(false)
   const closeTimer = useRef<number | null>(null)
   const clearClose = () => {
     if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
@@ -33,14 +37,18 @@ export function CourseField({
     }
   }, [])
   const q = value.trim().toLowerCase()
-  const options = [...courses].sort((a, b) => {
-    const am = q && a.toLowerCase().includes(q) ? 0 : 1
-    const bm = q && b.toLowerCase().includes(q) ? 0 : 1
-    return am - bm || a.localeCompare(b)
-  })
+  // Matches only while typing, so a long list never covers the rest of the form.
+  const options = [...courses].filter((c) => !typing || !q || c.toLowerCase().includes(q)).sort((a, b) => a.localeCompare(b))
 
-  const pick = (c: string) => {
-    onChange(c)
+  const typed = value.trim().replace(/\s+/g, " ")
+  const creatable = Boolean(onCreate) && typed.length > 0 && !courses.some((c) => c.toLowerCase() === typed.toLowerCase())
+  const rows = creatable ? [null, ...options] : options
+
+  const pick = (c: string | null) => {
+    if (c === null) {
+      onChange(typed)
+      onCreate?.(typed)
+    } else onChange(c)
     setOpen(false)
     setActive(-1)
   }
@@ -59,10 +67,12 @@ export function CourseField({
         maxLength={40}
         onChange={(e) => {
           onChange(e.target.value)
+          setTyping(true)
           clearClose()
           setOpen(true)
         }}
         onFocus={() => {
+          setTyping(false)
           clearClose()
           setOpen(true)
         }}
@@ -74,13 +84,14 @@ export function CourseField({
           if (!open && e.key === "ArrowDown") setOpen(true)
           if (e.key === "ArrowDown") {
             e.preventDefault()
-            setActive((i) => Math.min(options.length - 1, i + 1))
+            setActive((i) => Math.min(rows.length - 1, i + 1))
           } else if (e.key === "ArrowUp") {
             e.preventDefault()
             setActive((i) => Math.max(0, i - 1))
           } else if (e.key === "Enter" && open) {
             e.preventDefault()
-            if (active >= 0 && options[active]) pick(options[active])
+            if (active >= 0 && active < rows.length) pick(rows[active])
+            else if (creatable) pick(null)
           } else if (e.key === "Escape") {
             setOpen(false)
           }
@@ -88,15 +99,30 @@ export function CourseField({
         className="pr-8"
       />
       <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-      {open && options.length > 0 && (
+      {open && rows.length > 0 && (
         <ul
           id={listId}
           role="listbox"
           className="absolute inset-x-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
         >
-          {options.map((c, i) => {
+          {rows.map((c, i) => {
+            if (c === null) return (
+              <li
+                key="create"
+                role="option"
+                aria-selected={false}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  clearClose()
+                  pick(null)
+                }}
+                onMouseEnter={() => setActive(i)}
+                className={cn("flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1.5 text-sm font-medium text-primary", i === active && "bg-secondary")}
+              >
+                <Plus className="size-3.5" /> Create course “{typed}”
+              </li>
+            )
             const selected = c === value
-            const match = q && c.toLowerCase().includes(q)
             return (
               <li
                 key={c}
@@ -111,7 +137,6 @@ export function CourseField({
                 className={cn(
                   "flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 text-sm",
                   i === active && "bg-secondary",
-                  !match && q && "text-muted-foreground",
                 )}
               >
                 {c}
