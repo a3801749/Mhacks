@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Check, ChevronDown, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { courseKey } from "@/lib/courses"
 import { cn } from "@/lib/utils"
 
 /** Course picker: lists every course, and typing a new name offers to create it. */
@@ -36,12 +37,12 @@ export function CourseField({
       if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
     }
   }, [])
-  const q = value.trim().toLowerCase()
+  const q = courseKey(value)
   // Matches only while typing, so a long list never covers the rest of the form.
-  const options = [...courses].filter((c) => !typing || !q || c.toLowerCase().includes(q)).sort((a, b) => a.localeCompare(b))
+  const options = [...courses].filter((c) => !typing || !q || courseKey(c).includes(q)).sort((a, b) => a.localeCompare(b))
 
   const typed = value.trim().replace(/\s+/g, " ")
-  const creatable = Boolean(onCreate) && typed.length > 0 && !courses.some((c) => c.toLowerCase() === typed.toLowerCase())
+  const creatable = Boolean(onCreate) && typed.length > 0 && !courses.some((c) => courseKey(c) === courseKey(typed))
   const rows = creatable ? [null, ...options] : options
 
   const pick = (c: string | null) => {
@@ -61,6 +62,7 @@ export function CourseField({
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={open && active >= 0 && active < rows.length ? `${listId}-${active}` : undefined}
         autoComplete="off"
         value={value}
         placeholder={placeholder}
@@ -68,11 +70,13 @@ export function CourseField({
         onChange={(e) => {
           onChange(e.target.value)
           setTyping(true)
+          setActive(-1)
           clearClose()
           setOpen(true)
         }}
         onFocus={() => {
           setTyping(false)
+          setActive(-1)
           clearClose()
           setOpen(true)
         }}
@@ -109,6 +113,7 @@ export function CourseField({
             if (c === null) return (
               <li
                 key="create"
+                id={`${listId}-${i}`}
                 role="option"
                 aria-selected={false}
                 onPointerDown={(e) => {
@@ -126,6 +131,7 @@ export function CourseField({
             return (
               <li
                 key={c}
+                id={`${listId}-${i}`}
                 role="option"
                 aria-selected={selected}
                 onPointerDown={(e) => {
