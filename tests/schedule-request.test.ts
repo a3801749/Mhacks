@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { mockAdjust, parseScheduleRequest, withRequestedEvent } from "../src/lib/ai/fallback"
+import { mockAdjust, parseScheduleRequest, scheduleClarification, withRequestedEvent } from "../src/lib/ai/fallback"
 import type { ScheduleChange } from "../src/lib/types"
 import { sanitizeScheduleChanges } from "../src/lib/schedule-validation"
 import { event, today, week } from "./fixtures"
@@ -109,6 +109,47 @@ test("the offline fallback leaves work alone when scheduling is declined or only
       assert.deepEqual(mockAdjust(data, message, [], { date: today, minute: 540 }).changes, [])
     }
   }
+})
+
+test("declined and hypothetical edits are handled before Gemini or fallback can move work", () => {
+  for (const message of ["Don't move my work", "Do not skip Prototype voice flow", "What if I reschedule my work?", "Should I cancel reading?", "I don't want lunch with Sam"]) {
+    assert.ok(scheduleClarification(message, [], today), message)
+    const result = mockAdjust(week({ events: [event()] }), message, [], { date: today, minute: 540 })
+    assert.deepEqual(result.changes, [], message)
+  }
+})
+
+test("unsupported messages never default to moving the first work block", () => {
+  for (const guidanceMode of ["anchor", "coach", "autopilot"] as const) {
+    const data = week({ events: [event({ title: "Prototype voice flow" })] })
+    data.settings.guidanceMode = guidanceMode
+    for (const message of ["Hello", "What's on my calendar Wednesday?", "I don't want lunch with Sam", "Please explain my calendar", "Yes please"]) {
+      const result = mockAdjust(data, message, [], { date: today, minute: 540 })
+      assert.deepEqual(result.changes, [], message)
+      assert.doesNotMatch(result.reply, /Prototype voice flow/)
+    }
+  }
+})
+
+test("explicit work adjustments and the existing quick prompts still work offline", () => {
+  const data = week({ events: [event()] })
+  for (const message of ["I'm ordering pizza instead", "I'm not doing this right now, move it", "Move my evening work to tomorrow morning"]) {
+    assert.equal(mockAdjust(data, message, [], { date: today, minute: 540 }).changes[0]?.action, "move")
+  }
+  const shorter = mockAdjust(data, "Can we just do 25 minutes?", [], { date: today, minute: 540 })
+  assert.equal(shorter.changes[0]?.action, "shorten")
+  assert.equal(shorter.changes[0]?.endMin, 625)
+})
+
+test("an Anchor confirmation continues its pending move, not an unrelated conversation", () => {
+  const data = week({ events: [event()] })
+  data.settings.guidanceMode = "anchor"
+  const first = mockAdjust(data, "Move my work to tomorrow", [], { date: today, minute: 540 })
+  assert.deepEqual(first.changes, [])
+  const confirmed = mockAdjust(data, "Yes please", [{ role: "user", text: "Move my work to tomorrow" }, { role: "agent", text: first.reply }], { date: today, minute: 540 })
+  assert.equal(confirmed.changes[0]?.action, "move")
+  const unrelated = mockAdjust(data, "Yes please", [{ role: "agent", text: "What time should I set for lunch?" }], { date: today, minute: 540 })
+  assert.deepEqual(unrelated.changes, [])
 })
 
 test("the offline fallback creates the event and moves what is in the way", () => {

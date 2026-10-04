@@ -44,7 +44,7 @@ function pickTarget(message: string, upcoming: CalendarEvent[], data: WeekData) 
   return upcoming[0]
 }
 
-const AFFIRM = /\b(yes|yeah|yep|sure|ok|okay|fine|do it|anyway|please|go ahead)\b/i
+const AFFIRM = /^\s*(yes|yeah|yep|sure|ok|okay|fine|do it|go ahead)(?:[, ]+please)?[.!]?\s*$/i
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
 const PLANS = /\b(breakfast|brunch|lunch|dinner|coffee|drinks|meeting|call|study session|study group|office hours|gym|workout|run|practice|appointment|hangout)\b(\s+with\s+[a-z]+)?/i
 const SCHEDULE_VERBS = /\b(schedule|add|book|put|plan|set up|make time|create)\b/i
@@ -52,8 +52,8 @@ const WANTS_EVENT = /\b(i want|i wanna|i would like|i'd like|let's|can you|could
 const EDIT_VERBS = /\b(move|reschedule|cancel|skip|delete|drop|shorten)\b/i
 
 function isSchedulingDiscussion(message: string) {
-  return (SCHEDULE_VERBS.test(message) || WANTS_EVENT.test(message) && PLANS.test(message)) &&
-    (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time|create|want|have)\b/i.test(message) ||
+  return (SCHEDULE_VERBS.test(message) || EDIT_VERBS.test(message) || PLANS.test(message)) &&
+    (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time|create|want|have|move|reschedule|cancel|skip|delete|drop|shorten)\b/i.test(message) ||
       /\b(?:what if|should (?:i|we))\b/i.test(message))
 }
 
@@ -142,6 +142,7 @@ export function parseScheduleRequest(message: string, history: ChatTurn[], today
 }
 
 export function scheduleClarification(message: string, history: ChatTurn[], today: string) {
+  if (isSchedulingDiscussion(message)) return "Tell me what you'd like to schedule when you're ready."
   const draft = readScheduleRequest(message, history, today)
   return draft && draft.startMin == null ? `What time on ${weekdayLong(draft.date)} should I set for ${draft.title}?` : null
 }
@@ -225,13 +226,17 @@ export function mockAdjust(
   history: ChatTurn[],
   now: { date: string; minute: number },
 ): AdjustResponse {
-  if (isSchedulingDiscussion(message)) {
-    return { reply: "Tell me what you'd like to schedule when you're ready.", changes: [], source: "mock" }
-  }
   const clarification = scheduleClarification(message, history, now.date)
   if (clarification) return { reply: clarification, changes: [], source: "mock" }
   const request = parseScheduleRequest(message, history, now.date)
   if (request) return mockScheduleRequest(data, request, now)
+  const lastAgent = [...history].reverse().find((t) => t.role === "agent")
+  const agreed = !!lastAgent && /before we move|say yes and I'll move/i.test(lastAgent.text) && AFFIRM.test(message)
+  const rescheduling = EDIT_VERBS.test(message) || /\b(?:ordering|getting|having|going out)\b.*\binstead\b/i.test(message) ||
+    /\b(?:only|just|short)\b.*\b\d+\s*(?:min|minute)/i.test(message) || agreed
+  if (!rescheduling) {
+    return { reply: "What event would you like to add or change? Include the day and time.", changes: [], source: "mock" }
+  }
   const upcoming = upcomingWork(data, now)
   const target = pickTarget(message, upcoming, data)
   if (!target) {
@@ -250,8 +255,6 @@ export function mockAdjust(
   const momentum = loggedOnTask > 0 ? ` You've already put ${formatDuration(loggedOnTask)} into it, so it's not starting from zero.` : ""
 
   if (mode === "anchor") {
-    const lastAgent = [...history].reverse().find((t) => t.role === "agent")
-    const agreed = lastAgent && AFFIRM.test(message)
     if (!agreed) {
       return {
         reply: `I hear you. Before we move ${target.title}, could you give it just twenty-five minutes instead of ${formatDuration(length)}?${momentum} Say yes and I'll move the whole block, or try a short sprint.`,
