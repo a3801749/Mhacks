@@ -47,40 +47,94 @@ function pickTarget(message: string, upcoming: CalendarEvent[], data: WeekData) 
 const AFFIRM = /\b(yes|yeah|yep|sure|ok|okay|fine|do it|anyway|please|go ahead)\b/i
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
 const PLANS = /\b(breakfast|brunch|lunch|dinner|coffee|drinks|meeting|call|study session|study group|office hours|gym|workout|run|practice|appointment|hangout)\b(\s+with\s+[a-z]+)?/i
-const SCHEDULE_VERBS = /\b(schedule|add|book|put|plan|set up|make time)\b/i
+const SCHEDULE_VERBS = /\b(schedule|add|book|put|plan|set up|make time|create)\b/i
+const WANTS_EVENT = /\b(i want|i wanna|i would like|i'd like|let's|can you|could you|please)\b/i
+const EDIT_VERBS = /\b(move|reschedule|cancel|skip|delete|drop|shorten)\b/i
 
 function isSchedulingDiscussion(message: string) {
-  return SCHEDULE_VERBS.test(message) &&
-    (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time)\b/i.test(message) ||
+  return (SCHEDULE_VERBS.test(message) || WANTS_EVENT.test(message) && PLANS.test(message)) &&
+    (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time|create|want|have)\b/i.test(message) ||
       /\b(?:what if|should (?:i|we))\b/i.test(message))
 }
 
-/** Reads "schedule something for 8pm on Wednesday" style requests; null when it isn't one. */
-export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
-  const lower = message.toLowerCase()
-  if (!SCHEDULE_VERBS.test(message) || isSchedulingDiscussion(message)) return null
-  const time = lower.match(/\b(?:at|for|around)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/) ??
+function clockMinute(text: string): number | null {
+  const lower = text.toLowerCase()
+  const time = lower.match(/\b(?:at|for|around)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\b(?!\s*(?:hours?|hrs?|minutes?|mins?))/) ??
     lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)/)
-  if (!time) return null
+  if (!time) {
+    if (/\bnoon\b/.test(lower)) return 720
+    if (/\bmidnight\b/.test(lower)) return 0
+    const hours = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+    const spoken = lower.match(/\b(?:at\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+(thirty|fifteen|forty[ -]five))?\s+(am|pm|a\.m\.|p\.m\.)/)
+    if (!spoken) return null
+    let hour = hours.indexOf(spoken[1]) + 1
+    if (spoken[3][0] === "p" && hour < 12) hour += 12
+    else if (spoken[3][0] === "a" && hour === 12) hour = 0
+    return hour * 60 + (spoken[2] === "thirty" ? 30 : spoken[2] === "fifteen" ? 15 : spoken[2] ? 45 : 0)
+  }
   let hour = Number(time[1])
   const minute = Number(time[2] ?? 0)
   const meridiem = time[3]?.[0]
-  if (hour > 23 || minute > 59) return null
+  if (hour > 23 || minute > 59 || meridiem && (hour < 1 || hour > 12)) return null
   if (meridiem === "p" && hour < 12) hour += 12
   else if (meridiem === "a" && hour === 12) hour = 0
   else if (!meridiem && hour >= 1 && hour <= 7) hour += 12
+  return hour * 60 + minute
+}
 
-  let date = today
+function requestedDate(text: string, today: string): string | null {
+  const lower = text.toLowerCase()
   const weekday = WEEKDAYS.findIndex((d) => lower.includes(d))
-  if (/\btomorrow\b/.test(lower)) date = addDays(today, 1)
-  else if (weekday >= 0) date = addDays(today, (weekday - fromDateKey(today).getDay() + 7) % 7)
+  if (/\btomorrow\b/.test(lower)) return addDays(today, 1)
+  if (/\b(today|tonight)\b/.test(lower)) return today
+  return weekday >= 0 ? addDays(today, (weekday - fromDateKey(today).getDay() + 7) % 7) : null
+}
+
+function requestsEvent(message: string) {
+  return !isSchedulingDiscussion(message) && !EDIT_VERBS.test(message) &&
+    (SCHEDULE_VERBS.test(message) || WANTS_EVENT.test(message) && PLANS.test(message))
+}
+
+/** Keep an incomplete event request separate from a request to rearrange existing work. */
+export function readScheduleRequest(message: string, history: ChatTurn[], today: string): {
+  title: string; date: string; startMin: number | null; endMin: number | null
+} | null {
+  const previous = [...history].reverse().find((t) => t.role === "user")
+  const lastAgent = [...history].reverse().find((t) => t.role === "agent")
+  const direct = requestsEvent(message)
+  const answer = !direct && !/\b(not|don't|do not)\b/i.test(message) && !EDIT_VERBS.test(message) && clockMinute(message) != null && previous &&
+    requestsEvent(previous.text) && lastAgent && /what time|when should|which day/i.test(lastAgent.text)
+  if (!direct && !answer) return null
+  const source = direct ? message : previous!.text
+  const date = requestedDate(message, today) ?? requestedDate(source, today) ?? today
 
   // "can you schedule something" refers back to what the user just described.
-  const said = [message, ...[...history].reverse().filter((t) => t.role === "user").map((t) => t.text)]
+  const said = /\b(something|it|that event)\b/i.test(source)
+    ? [source, ...[...history].reverse().filter((t) => t.role === "user").map((t) => t.text)] : [source]
   const named = said.map((t) => t.match(PLANS)).find(Boolean)
   const title = named ? named[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bWith\b/, "with") : "New event"
-  const startMin = hour * 60 + minute
-  return { title, date, startMin, endMin: Math.min(1440, startMin + 60) }
+  let startMin = clockMinute(message) ?? (!direct ? clockMinute(source) : null)
+  if (startMin == null && named) {
+    // Repeating the same request can retain the user's own time, never an agent's invented time.
+    for (const turn of [...history].reverse().filter((t) => t.role === "user" && requestsEvent(t.text))) {
+      const prior = readScheduleRequest(turn.text, [], today)
+      if (prior?.title.toLowerCase() === title.toLowerCase() && prior.date === date && prior.startMin != null) {
+        startMin = prior.startMin
+        break
+      }
+    }
+  }
+  return { title, date, startMin, endMin: startMin == null ? null : Math.min(1440, startMin + 60) }
+}
+
+export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
+  const draft = readScheduleRequest(message, history, today)
+  return draft?.startMin != null && draft.endMin != null ? { ...draft, startMin: draft.startMin, endMin: draft.endMin } : null
+}
+
+export function scheduleClarification(message: string, history: ChatTurn[], today: string) {
+  const draft = readScheduleRequest(message, history, today)
+  return draft && draft.startMin == null ? `What time on ${weekdayLong(draft.date)} should I set for ${draft.title}?` : null
 }
 
 /** Fill the requested event, without mistaking an unrelated make-up block for it. */
@@ -162,6 +216,8 @@ export function mockAdjust(
   if (isSchedulingDiscussion(message)) {
     return { reply: "Tell me what you'd like to schedule when you're ready.", changes: [], source: "mock" }
   }
+  const clarification = scheduleClarification(message, history, now.date)
+  if (clarification) return { reply: clarification, changes: [], source: "mock" }
   const request = parseScheduleRequest(message, history, now.date)
   if (request) return mockScheduleRequest(data, request, now)
   const upcoming = upcomingWork(data, now)

@@ -12,7 +12,7 @@ import {
 } from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { sanitizeScheduleChanges } from "../schedule-validation"
-import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, speakTime, withRequestedEvent } from "./fallback"
+import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, scheduleClarification, speakTime, withRequestedEvent } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
 import {
@@ -69,6 +69,8 @@ export async function adjustSchedule(
   history: ChatTurn[],
   now: Now,
 ): Promise<AdjustResponse> {
+  const clarification = scheduleClarification(message, history, now.date)
+  if (clarification) return { reply: clarification, changes: [], source: "mock" }
   if (geminiEnabled()) {
     try {
       const out = await generateJson<{ reply: string; changes: ScheduleChange[] }>(

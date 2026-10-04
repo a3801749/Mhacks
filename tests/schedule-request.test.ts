@@ -33,6 +33,68 @@ test("schedule requests resolve the title, weekday, and time", () => {
   assert.equal(parseScheduleRequest("move my evening work to tomorrow", [], today), null)
 })
 
+test("new-event wording and spoken clock times identify the requested lunch", () => {
+  for (const message of [
+    "Create a lunch with Sam event for Wednesday at noon.",
+    "I'd like a new lunch with Sam event on Wednesday at noon.",
+    "Can you schedule lunch with Sam this Wednesday at twelve pm?",
+  ]) {
+    const request = parseScheduleRequest(message, [], today)
+    assert.equal(request?.title, "Lunch with Sam")
+    assert.equal(request?.date, wednesday)
+    assert.equal(request?.startMin, 720)
+  }
+  assert.equal(parseScheduleRequest("schedule lunch with Sam Wednesday at one thirty pm", [], today)?.startMin, 810)
+  assert.equal(parseScheduleRequest("schedule lunch with Sam Wednesday at 13:30", [], today)?.startMin, 810)
+})
+
+test("the reported wanna-have-lunch request creates lunch instead of moving Prototype voice flow", () => {
+  const message = "I wanna have lunch with sam again on wednesday at 3pm for an hour,"
+  const data = week({ events: [event({ title: "Prototype voice flow" })] })
+  assert.deepEqual(parseScheduleRequest(message, [], today),
+    { title: "Lunch with Sam", date: wednesday, startMin: 900, endMin: 960 })
+  const result = mockAdjust(data, message, [], { date: today, minute: 540 })
+  assert.deepEqual(result.changes.map((c) => c.action), ["create"])
+  assert.equal(result.changes[0].title, "Lunch with Sam")
+  assert.equal(result.changes[0].startMin, 900)
+})
+
+test("the reported spoken repeat retains the same lunch's time from the user's prior turn", () => {
+  const history = [
+    { role: "user" as const, text: "I wanna have lunch with sam again on wednesday at 3pm for an hour," },
+    { role: "agent" as const, text: "No stress. How about Prototype voice flow at 11:45 a.m. today? That's when you tend to actually get things done." },
+  ]
+  assert.deepEqual(parseScheduleRequest("I want to have lunch with Sam on Wednesday", history, today),
+    { title: "Lunch with Sam", date: wednesday, startMin: 900, endMin: 960 })
+  assert.equal(parseScheduleRequest("I want to have coffee with Sam on Wednesday", history, today), null)
+})
+
+test("missing lunch times ask for that detail instead of moving unrelated work", () => {
+  for (const guidanceMode of ["anchor", "coach", "autopilot"] as const) {
+    const data = week({ events: [event({ title: "Prototype voice flow" })] })
+    data.settings.guidanceMode = guidanceMode
+    for (const message of ["Schedule a new lunch with Sam on Wednesday.", "I'd like a new lunch with Sam event on Wednesday."]) {
+      const result = mockAdjust(data, message, [], { date: today, minute: 540 })
+      assert.deepEqual(result.changes, [])
+      assert.match(result.reply, /what time/i)
+      assert.match(result.reply, /Lunch with Sam/)
+      assert.match(result.reply, /Wednesday/)
+    }
+  }
+})
+
+test("a short answer completes the pending lunch request without reusing finished requests", () => {
+  const history = [
+    { role: "user" as const, text: "Schedule a new lunch with Sam on Wednesday." },
+    { role: "agent" as const, text: "What time on Wednesday should I set for Lunch with Sam?" },
+  ]
+  assert.deepEqual(parseScheduleRequest("Noon please", history, today),
+    { title: "Lunch with Sam", date: wednesday, startMin: 720, endMin: 780 })
+  assert.equal(parseScheduleRequest("noon", [{ ...history[0], text: "schedule lunch Wednesday at noon" },
+    { ...history[1], text: "Lunch is ready to add." }], today), null)
+  assert.equal(parseScheduleRequest("move my work instead", history, today), null)
+})
+
 test("negated and hypothetical scheduling messages do not force a new event", () => {
   for (const message of ["don't schedule dinner at 8pm Wednesday", "do not add coffee at 9am tomorrow", "What if I schedule dinner at 8pm?", "Should I schedule a call at 2pm?"]) {
     assert.equal(parseScheduleRequest(message, [], today), null)
