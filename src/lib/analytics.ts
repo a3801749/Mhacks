@@ -23,9 +23,13 @@ export function taskLogged(taskId: string, logs: TimeLog[]) {
   return logs.filter((l) => l.taskId === taskId).reduce((sum, l) => sum + l.minutes, 0)
 }
 
-export function projectLogged(projectId: string, tasks: Task[], logs: TimeLog[]) {
+export function projectLogged(projectId: string, tasks: Task[], logs: TimeLog[], events: CalendarEvent[] = []) {
   const ids = new Set(tasks.filter((t) => t.projectId === projectId).map((t) => t.id))
-  return logs.filter((l) => ids.has(l.taskId)).reduce((sum, l) => sum + l.minutes, 0)
+  const taskMinutes = logs.filter((l) => ids.has(l.taskId)).reduce((sum, l) => sum + l.minutes, 0)
+  // Task-less focus blocks store their signed-log total on the event itself.
+  const assignmentMinutes = events.filter((e) => e.projectId === projectId && e.kind === "work" && !e.taskId)
+    .reduce((sum, e) => sum + e.actualMinutes, 0)
+  return taskMinutes + assignmentMinutes
 }
 
 export function projectStartedDate(projectId: string, data: WeekData): string | null {
@@ -62,7 +66,7 @@ export function categoryStats(data: WeekData): CategoryStat[] {
   const add = (key: string, course: string | null, type: Project["type"] | null, p: Project) => {
     const g = groups.get(key) ?? { key, course, type, planned: 0, actual: 0, multiplier: 1, samples: 0 }
     g.planned += p.targetMinutes
-    g.actual += projectLogged(p.id, data.tasks, data.logs)
+    g.actual += projectLogged(p.id, data.tasks, data.logs, data.events)
     g.samples += 1
     g.multiplier = g.actual / g.planned
     groups.set(key, g)
@@ -89,7 +93,7 @@ export interface Estimate {
 }
 
 export function estimateProject(project: Project, data: WeekData, stats = categoryStats(data)): Estimate {
-  const logged = projectLogged(project.id, data.tasks, data.logs)
+  const logged = projectLogged(project.id, data.tasks, data.logs, data.events)
   const p = project.progressPercent
   const category =
     stats.find((s) => s.key === `${project.course}|${project.type}`) ?? stats.find((s) => s.key === `*|${project.type}`)
@@ -153,7 +157,7 @@ export interface ProjectHealth {
 export function projectHealth(data: WeekData, today: string): ProjectHealth[] {
   const stats = categoryStats(data)
   return activeProjects(data).map((project) => {
-    const logged = projectLogged(project.id, data.tasks, data.logs)
+    const logged = projectLogged(project.id, data.tasks, data.logs, data.events)
     const estimate = estimateProject(project, data, stats)
     const remaining = estimate.remaining
     const scheduledAhead = projectScheduledAhead(project.id, data.events, today, project.dueDate)

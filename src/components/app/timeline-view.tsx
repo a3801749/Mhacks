@@ -9,6 +9,7 @@ import { ASSIGNMENT_TYPES } from "@/lib/brand"
 import { addDays, daysBetween, formatDuration, fromDateKey, monthDay } from "@/lib/time"
 import type { Project } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { timelineTicks } from "@/lib/timeline-layout"
 import { DueDateInput, DueEdge } from "./timeline-due"
 import { useApp } from "./app-shell"
 
@@ -66,7 +67,7 @@ export function TimelineView() {
         started: projectStartedDate(p.id, data),
         fillEnd: addDays(p.completedDate!, 1),
         percent: 100,
-        logged: projectLogged(p.id, data.tasks, data.logs),
+        logged: projectLogged(p.id, data.tasks, data.logs, data.events),
         remaining: null,
         status: { label: `Finished ${monthDay(p.completedDate!)}`, tone: "done" },
       })
@@ -76,11 +77,9 @@ export function TimelineView() {
 
   const rangeStart = addDays(rows.reduce((m, r) => (r.start < m ? r.start : m), today), -1)
   const rangeEnd = addDays(rows.reduce((m, r) => (r.end > m ? r.end : m), addDays(today, 7)), 2)
-  const totalDays = daysBetween(rangeStart, rangeEnd)
+  const { days: totalDays, step: labelEvery, labels: ticks, grid: gridDates } = timelineTicks(rangeStart, rangeEnd)
   const x = (date: string, frac = 0) => ((daysBetween(rangeStart, date) + frac) / totalDays) * 100
   const todayX = x(today, now.minute / 1440)
-  const ticks = Array.from({ length: totalDays }, (_, i) => addDays(rangeStart, i))
-  const labelEvery = totalDays > 45 ? 7 : totalDays > 21 ? 3 : 1
 
   return (
     <div className="space-y-6">
@@ -107,20 +106,19 @@ export function TimelineView() {
           <div className="grid grid-cols-[220px_minmax(0,1fr)] border-b">
             <div className="px-4 py-2 text-xs text-muted-foreground">Assignment</div>
             <div className="relative h-9">
-              {ticks.map((d, i) => {
+              {gridDates.map((d) => <span key={d} className="absolute inset-y-0 w-px bg-border" style={{ left: `${x(d)}%` }} />)}
+              {ticks.map((d) => {
                 const date = fromDateKey(d)
-                const isMonday = date.getDay() === 1
                 return (
-                  <div key={d} className="absolute inset-y-0" style={{ left: `${x(d)}%`, width: `${100 / totalDays}%` }}>
-                    {isMonday && <span className="absolute inset-y-0 left-0 w-px bg-border" />}
-                    {i % labelEvery === 0 && (
+                  <div key={d} className="absolute inset-y-0" style={{ left: `${x(d)}%`, width: `${labelEvery * 100 / totalDays}%` }}>
+                    {(
                       <span
                         className={cn(
                           "absolute top-1/2 left-1/2 -translate-1/2 text-[10px] whitespace-nowrap tabular-nums",
                           d === today ? "font-semibold text-primary" : "text-muted-foreground",
                         )}
                       >
-                        {labelEvery === 1 ? date.getDate() : monthDay(d)}
+                        {labelEvery === 1 ? date.getDate() : totalDays > 366 ? date.toLocaleDateString("en-US", { month: "short", year: "numeric" }) : monthDay(d)}
                       </span>
                     )}
                   </div>
@@ -163,11 +161,7 @@ export function TimelineView() {
                 <DueDateInput key={`${r.project.id}-${r.project.dueDate}`} project={r.project} />
                 </div>
                 <div className="relative min-h-24">
-                  {ticks.map((d) =>
-                    fromDateKey(d).getDay() === 1 ? (
-                      <span key={d} className="absolute inset-y-0 w-px bg-border/70" style={{ left: `${x(d)}%` }} />
-                    ) : null,
-                  )}
+                  {gridDates.map((d) => <span key={d} className="absolute inset-y-0 w-px bg-border/70" style={{ left: `${x(d)}%` }} />)}
                   <div
                     className={cn("absolute top-1/2 h-7 -translate-y-1/2 rounded-lg", r.status.tone === "done" && !r.remaining && "opacity-60")}
                     style={{

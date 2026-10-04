@@ -1,7 +1,6 @@
 "use client"
 
 import { ArrowRightLeft, Check, CircleDashed, Coffee, Moon, Sparkles } from "lucide-react"
-import { taskLogged } from "@/lib/analytics"
 import { formatClock, formatDuration, formatRange, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -27,13 +26,9 @@ export function BlockCard({
   onOpen: () => void
 }) {
   const project = data.projects.find((p) => p.id === event.projectId)
-  const task = data.tasks.find((t) => t.id === event.taskId)
   const color = project?.color ?? "#A8A29E"
   const planned = event.endMin - event.startMin
-  const logged = task ? taskLogged(task.id, data.logs) : 0
-  const taskPct = task ? Math.min(100, Math.round((logged / task.estimateMinutes) * 100)) : 0
   const status = isNow && event.status === "planned" ? null : STATUS_META[event.status]
-  const showActual = event.status !== "planned"
   const Icon = event.kind === "life" ? Coffee : null
 
   return (
@@ -97,19 +92,15 @@ export function BlockCard({
         </div>
       </div>
 
-      {(showActual || task || event.kind === "work") && (
+      {event.kind === "work" && (
         <div className="mt-3 space-y-2 pl-1">
-          {(showActual || event.kind === "work") && (
-            <PlannedVsActual planned={planned} actual={event.actualMinutes} color={color} />
-          )}
-          {task && !isPast && (
+          <PlannedVsActual planned={planned} actual={event.actualMinutes} color={color} />
+          {project && !isPast && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full" style={{ width: `${taskPct}%`, backgroundColor: color }} />
-              </div>
-              <span className="tabular-nums">
-                {formatDuration(logged)} / {formatDuration(task.estimateMinutes)} on task
-              </span>
+              {project.progressPercent !== null && <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full" style={{ width: `${project.progressPercent}%`, backgroundColor: color }} />
+              </div>}
+              <span className="tabular-nums">{project.progressPercent !== null ? `${project.progressPercent}% of assignment` : "Report assignment progress"}</span>
             </div>
           )}
         </div>

@@ -37,7 +37,7 @@ export function DueEdge({ project, date, position, days, onPreview }: {
     onPreview(null)
   }
   return <button type="button" role="slider" aria-label={`Due date for ${project.name}. Drag, or use arrow keys to change it.`}
-    aria-valuemin={0} aria-valuenow={daysBetween(project.assignedDate, date)} aria-valuetext={date}
+    aria-valuemin={0} aria-valuemax={daysBetween(project.assignedDate, "9999-12-31")} aria-valuenow={daysBetween(project.assignedDate, date)} aria-valuetext={date}
     title={`Due ${monthDay(date)} · drag to change; arrows move by a day, Shift by a week`}
     disabled={saving}
     className="absolute top-1/2 z-10 flex h-10 w-4 -translate-x-1/2 -translate-y-1/2 touch-none cursor-ew-resize items-center justify-center rounded-sm bg-card/80 outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"

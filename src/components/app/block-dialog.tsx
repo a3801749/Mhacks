@@ -9,7 +9,7 @@ import { estimateProject, taskLogged } from "@/lib/analytics"
 import { Slider } from "@/components/ui/slider"
 import { SelectField } from "@/components/ui/select-field"
 import { AGENT_NAME } from "@/lib/brand"
-import { formatDuration, formatRange, MAX_LOG_MINUTES, monthDay, weekdayShort } from "@/lib/time"
+import { formatDuration, formatRange, MAX_LOG_MINUTES, monthDay, toDateKey, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, Project, TimeLog, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import type { WeekApi } from "@/hooks/use-week"
@@ -137,10 +137,10 @@ function BlockBody({
           <p className="font-heading text-2xl font-medium tabular-nums">{formatDuration(logged)}</p>
         </section>}
 
-        <section>
+        {live.kind === "work" && <section>
           <h3 className="mb-2 text-sm font-medium">This block</h3>
           <PlannedVsActual planned={planned} actual={live.actualMinutes} color={color} />
-        </section>
+        </section>}
 
         {canLog && <LogTime event={live} api={api} />}
 
@@ -339,7 +339,7 @@ function ProgressTrail({ logs, color, api }: { logs: TimeLog[]; color: string; a
                   </span>
                   <span className="text-muted-foreground">
                     {" "}
-                    · {weekdayShort(l.createdAt.slice(0, 10))} {monthDay(l.createdAt.slice(0, 10))}
+                    · {weekdayShort(toDateKey(new Date(l.createdAt)))} {monthDay(toDateKey(new Date(l.createdAt)))}
                   </span>
                   {l.note && <p className="text-muted-foreground">“{l.note}”</p>}
                 </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, GripVertical, Pin, Sparkles } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -27,6 +27,7 @@ export function ProjectRail({
   className?: string
   onEdit: (p: Project) => void
 }) {
+  const headingId = useId()
   const health = projectHealth(data, today).sort((a, b) => a.project.dueDate.localeCompare(b.project.dueDate))
   const pinned = health
     .filter((h) => h.project.pinned)
@@ -49,9 +50,9 @@ export function ProjectRail({
     .sort((a, b) => a.next.localeCompare(b.next))
 
   return (
-    <section className={cn("flex min-h-0 flex-col gap-5", className)} aria-labelledby="overview-heading">
+    <section className={cn("flex min-h-0 flex-col gap-5", className)} aria-labelledby={headingId}>
       <div className="flex shrink-0 items-baseline justify-between gap-2">
-        <h2 id="overview-heading" className="font-heading text-2xl font-medium tracking-tight">
+        <h2 id={headingId} className="font-heading text-2xl font-medium tracking-tight">
           Overview
         </h2>
         <Link

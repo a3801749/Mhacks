@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SelectField } from "@/components/ui/select-field"
 import { activeProjects } from "@/lib/analytics"
 import { recurrenceSummary, validateSeries } from "@/lib/recurrence"
-import { addDays, daysBetween, formatDuration, formatRange, validDate } from "@/lib/time"
+import { addDays, daysBetween, formatDuration, formatRange, fromDateKey, validDate } from "@/lib/time"
 import type { CalendarEvent, RecurrenceRule, SeriesScope } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useApp } from "./app-shell"
@@ -36,8 +36,9 @@ export function BlockForm({ draft, event, onDone, onWindowChange }: {
   const [date, setDate] = useState(event?.date ?? draft.date)
   const [start, setStart] = useState(toTime(event?.startMin ?? draft.startMin ?? 840))
   const [end, setEnd] = useState(toTime(event?.endMin ?? draft.endMin ?? (draft.startMin ?? 840) + 60))
-  const [projectId, setProjectId] = useState(event?.projectId ?? projects[0]?.id ?? "")
-  const [taskId, setTaskId] = useState(event?.taskId ?? "")
+  const initialProjectId = event ? event.projectId ?? "" : projects[0]?.id ?? ""
+  const [projectId, setProjectId] = useState(initialProjectId)
+  const [taskId, setTaskId] = useState(event ? event.taskId ?? "" : data.tasks.find((t) => t.projectId === initialProjectId && !t.done)?.id ?? "")
   const [title, setTitle] = useState(event?.title ?? "")
   const [location, setLocation] = useState(event?.location ?? "")
   const [meetingUrl, setMeetingUrl] = useState(event?.meetingUrl ?? "")
@@ -51,15 +52,25 @@ export function BlockForm({ draft, event, onDone, onWindowChange }: {
   const startMin = fromTime(start)
   const endMin = fromTime(end) || 1440
   const tasks = data.tasks.filter((t) => t.projectId === projectId && (!t.done || t.id === event?.taskId))
-  const task = tasks.find((t) => t.id === taskId) ?? tasks[0]
+  const task = tasks.find((t) => t.id === taskId)
+  const project = projects.find((p) => p.id === projectId)
   const linked = kind === "work" && Boolean(projectId)
-  const resolvedTitle = title.trim() || (linked ? task?.title ?? "" : "")
-  const valid = validDate(date) && Number.isFinite(startMin) && endMin > startMin && endMin <= 1440 && Boolean(resolvedTitle) && (!linked || Boolean(task))
+  const resolvedTitle = title.trim() || (linked ? task?.title ?? project?.name ?? "" : "")
+  const valid = validDate(date) && Number.isFinite(startMin) && endMin > startMin && endMin <= 1440 && Boolean(resolvedTitle) && (!linked || !taskId || Boolean(task))
   const recorded = Boolean(event && (event.actualMinutes > 0 || data.logs.some((l) => l.eventId === event.id)))
   const clash = data.events.find((e) => e.id !== event?.id && e.date === date && e.status !== "skipped" && e.startMin < endMin && e.endMin > startMin)
   const inputDate = series && scope === "all" ? addDays(series.startDate, daysBetween(event!.date, date)) : date
   const seriesInput = { title: resolvedTitle, location, meetingUrl, notes, startDate: inputDate, startMin, endMin, rule }
   const updateWindow = (next: Partial<BlockWindow>) => onWindowChange?.({ date, startMin, endMin, ...next })
+  const updateDate = (next: string) => {
+    if (validDate(next) && validDate(date) && rule.frequency === "weekly" &&
+        (series && scope !== "this" || !series && rule.weekdays.length === 1 && rule.weekdays[0] === fromDateKey(date).getDay())) {
+      const delta = daysBetween(date, next)
+      setRule({ ...rule, weekdays: rule.weekdays.map((day) => ((day + delta) % 7 + 7) % 7) })
+    }
+    setDate(next)
+    updateWindow({ date: next })
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,10 +84,10 @@ export function BlockForm({ draft, event, onDone, onWindowChange }: {
         result = series ? await api.editSeries(event!.id, input, scope as "following" | "all") : await api.createSeries(input, event?.id)
       } else if (event) {
         result = await api.updateEvent(event.id, { title: resolvedTitle, date, startMin, endMin, location, meetingUrl, notes,
-          ...(!series && !recorded ? { kind, projectId: linked ? projectId : null, taskId: linked ? task!.id : null } : {}) }, "Block updated")
+          ...(!series && !recorded ? { kind, projectId: linked ? projectId : null, taskId: linked ? task?.id ?? null : null } : {}) }, "Block updated")
       } else {
         result = await api.applyChanges([{ action: "create", date, startMin, endMin, title: resolvedTitle, kind,
-          projectId: linked ? projectId : null, taskId: linked ? task!.id : null, location, meetingUrl, notes, reason: "Scheduled by hand" }], "Added to your calendar")
+          projectId: linked ? projectId : null, taskId: linked ? task?.id ?? null : null, location, meetingUrl, notes, reason: "Scheduled by hand" }], "Added to your calendar")
       }
       if (result) onDone()
     } catch (err) { setError(err instanceof Error ? err.message : "Couldn't save") }
@@ -93,12 +104,12 @@ export function BlockForm({ draft, event, onDone, onWindowChange }: {
     {kind === "work" && <div className="space-y-2">
       <Label htmlFor={`${id}-assignment`}>Assignment (optional)</Label>
       <SelectField id={`${id}-assignment`} value={projectId} disabled={recorded} onValueChange={(v) => { setProjectId(v); setTaskId(""); setTitle("") }} options={[{ value: "", label: "None — independent focus time" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]} />
-      {linked && (tasks.length ? <SelectField label="Task" value={task?.id ?? ""} disabled={recorded} onValueChange={(v) => { setTaskId(v); setTitle("") }} options={tasks.map((t) => ({ value: t.id, label: t.title }))} /> : <p className="text-xs text-muted-foreground">No open tasks on this assignment. Reopen a task or choose independent focus time.</p>)}
+      {linked && <SelectField label="Task (optional)" value={taskId} disabled={recorded} onValueChange={(v) => { setTaskId(v); setTitle("") }} options={[{ value: "", label: "None — focus on the assignment" }, ...tasks.map((t) => ({ value: t.id, label: t.title }))]} />}
       {recorded && <p className="text-xs text-muted-foreground">Recorded time stays attached to its original assignment and task.</p>}
     </div>}
-    <div className="space-y-1"><Label htmlFor={`${id}-title`}>Title</Label><Input id={`${id}-title`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={linked ? task?.title : kind === "life" ? "Class, appointment, study group…" : "Independent focus time"} maxLength={80} required={!linked} /></div>
-    <div className="grid grid-cols-3 gap-2">
-      <div className="space-y-1"><Label htmlFor={`${id}-date`}>Date</Label><Input id={`${id}-date`} type="date" value={date} required onChange={(e) => { setDate(e.target.value); updateWindow({ date: e.target.value }) }} /></div>
+    <div className="space-y-1"><Label htmlFor={`${id}-title`}>Title</Label><Input id={`${id}-title`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={linked ? task?.title ?? project?.name : kind === "life" ? "Class, appointment, study group…" : "Independent focus time"} maxLength={80} required={!linked} /></div>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="col-span-2 space-y-1 sm:col-span-1"><Label htmlFor={`${id}-date`}>Date</Label><Input id={`${id}-date`} type="date" value={date} required onChange={(e) => updateDate(e.target.value)} /></div>
       <div className="space-y-1"><Label htmlFor={`${id}-start`}>From</Label><Input id={`${id}-start`} type="time" value={start} required onChange={(e) => { setStart(e.target.value); updateWindow({ startMin: fromTime(e.target.value) }) }} /></div>
       <div className="space-y-1"><Label htmlFor={`${id}-end`}>To</Label><Input id={`${id}-end`} type="time" value={end} required onChange={(e) => { setEnd(e.target.value); updateWindow({ endMin: fromTime(e.target.value) || 1440 }) }} /></div>
     </div>

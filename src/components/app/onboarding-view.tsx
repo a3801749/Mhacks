@@ -243,8 +243,8 @@ function ExtrasStep({
           </div>
         </ExtraCard>
         <ExtraCard
-          title="AI planner suggestions"
-          body={`Drag out a block on the Plan page and ${AGENT_NAME} suggests how to split it across your tasks — based on deadlines, how long your work really takes, and how you've been feeling.`}
+          title="Tilly planner suggestions"
+          body={`Enable the optional ${AGENT_NAME} suggestions dropdown below manual block creation on the Plan page. Open it when you want help splitting a time window across your tasks.`}
           checked={planner}
           onChange={setPlanner}
         >
@@ -397,10 +397,10 @@ const TOUR = [
     title: "Today",
     what: "The last three days, today, and the next three, with a timeline for each day.",
     how: [
-      "Tap a block to log time and see everything you've put into that task.",
+      "Open a block to edit its date or length, log time, and update total assignment progress.",
       "Mark a task done, then report how far along the assignment is — estimates update from your pace.",
       "Rate the day 1–10 at the bottom, if you turned check-ins on.",
-      "Insights load automatically: patterns, suggested shifts, and questions for you to reflect on.",
+      "Turn Tilly insights on or off here. Looking back stays available either way.",
     ],
   },
   {
@@ -411,7 +411,7 @@ const TOUR = [
     how: [
       "Filter by class or category and sort assignments by what's due or needs attention.",
       "Pick a day to see its blocks and deadlines.",
-      "Use “Schedule event” to add a focus block or a life event.",
+      "Schedule focus time or a personal event, with location, meeting link, notes, and custom repeats.",
     ],
   },
   {
@@ -421,19 +421,19 @@ const TOUR = [
     what: "A week grid for blocking out time without deciding every minute.",
     how: [
       "Drag across a day (or tap on mobile) to carve out a block.",
-      `${AGENT_NAME} suggests how to split it across what's due — remove anything you don't want.`,
-      "Prefer to decide yourself? Pick one task and add it.",
+      "Drag existing blocks between days; use the lower edge to resize, or open Edit block.",
+      `${AGENT_NAME} suggestions are optional. Enable them on this page, then open the dropdown below manual creation.`,
     ],
   },
   {
     href: "/rhythm",
     icon: Activity,
-    title: "Rhythm",
-    what: "Screen time, but for your projects: when in the day each one actually happens.",
+    title: "Analytics",
+    what: "Focused time, active days, and work patterns from your time logs.",
     how: [
       "Switch between week and month, and group by assignment, course, or type.",
-      "Each day is a midnight-to-midnight strip; the ring shows when you wrapped up.",
-      "“What stands out” calls out patterns like late nights creeping later.",
+      "Summary stats and day-by-day strips show when you worked.",
+      "Show or hide Patterns. These observations are calculated from your logs.",
     ],
   },
   {
@@ -444,7 +444,7 @@ const TOUR = [
     how: [
       "The solid fill starts the day you began and grows with your progress.",
       "If the fill reaches the today line, you're on pace. If not, it says how far behind.",
-      "Click any row to retag it or mark it finished — finished work trains your estimates.",
+      "Drag a bar’s right edge or edit its date field to change the deadline. Open the assignment to edit its estimate.",
     ],
   },
 ]

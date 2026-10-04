@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { ArrowRight, Check, Lightbulb, Loader2, NotebookPen, RefreshCw, Sparkle, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -33,6 +33,8 @@ export function ReflectPanel({
   api: WeekApi
   className?: string
 }) {
+  const headingId = useId()
+  const insightsId = useId()
   const stats = backtrack(data, today)
   const key = insightKey(data, today)
   const [result, setResult] = useState<InsightResult | null>(null)
@@ -66,9 +68,9 @@ export function ReflectPanel({
   const refresh = () => setVersion((value) => value + 1)
 
   return (
-    <section className={cn("space-y-4", className)} aria-labelledby="reflect-heading">
+    <section className={cn("space-y-4", className)} aria-labelledby={headingId}>
       <div className="flex items-baseline justify-between">
-        <h2 id="reflect-heading" className="font-heading text-2xl font-medium tracking-tight">
+        <h2 id={headingId} className="font-heading text-2xl font-medium tracking-tight">
           Looking back
         </h2>
         <span className="text-xs text-muted-foreground">
@@ -120,7 +122,7 @@ export function ReflectPanel({
       <PreferenceSwitch setting="todayInsightsEnabled">Show Tilly insights</PreferenceSwitch>
       {data.settings.todayInsightsEnabled && <>
       <div className="flex items-center justify-between pt-1">
-        <h2 id="insights-heading" className="font-heading text-2xl font-medium tracking-tight">
+        <h2 id={insightsId} className="font-heading text-2xl font-medium tracking-tight">
           Insights
         </h2>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading} aria-label="Refresh insights">
@@ -151,7 +153,7 @@ export function ReflectPanel({
       )}
 
       {reflection && (
-        <div className={cn("space-y-4 transition-opacity", loading && "opacity-50")} aria-labelledby="insights-heading">
+        <div className={cn("space-y-4 transition-opacity", loading && "opacity-50")} aria-labelledby={insightsId}>
           <div className="rounded-lg border bg-card p-3.5">
             <p className="font-medium leading-snug">{reflection.headline}</p>
             <p className="mt-1 text-sm text-muted-foreground">{reflection.summary}</p>
