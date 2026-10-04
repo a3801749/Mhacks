@@ -1,17 +1,18 @@
 import "server-only"
-import { ApiError, GoogleGenAI } from "@google/genai"
+import { ApiError, GoogleGenAI, ThinkingLevel } from "@google/genai"
 
-// Older pinned models (e.g. gemini-2.5-flash) are closed to new API keys and the
-// newest ones regularly return 503 under load, so try the configured model first
-// and walk down this list on 404/429/5xx/timeouts, within one overall budget.
+// Lite models with minimal thinking answer in well under a second, which keeps Tilly
+// conversational. Older pinned models (e.g. gemini-2.5-*) are closed to new API keys
+// and any one model can 503 under load, so walk down this list on 404/429/5xx/timeouts.
+// Every listed model must accept thinkingLevel; "-latest" aliases reject it.
 const MODELS = [
   ...new Set(
-    [process.env.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest"]
+    [process.env.GEMINI_MODEL, "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
       .filter(Boolean) as string[],
   ),
 ]
-const ATTEMPT_MS = 18_000
-const BUDGET_MS = 40_000
+const ATTEMPT_MS = 10_000
+const BUDGET_MS = 25_000
 
 let client: GoogleGenAI | null = null
 
@@ -40,6 +41,7 @@ export async function generateJson<T>(systemInstruction: string, input: unknown,
           responseMimeType: "application/json",
           responseJsonSchema: schema,
           temperature: 0.6,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           abortSignal: AbortSignal.timeout(Math.min(ATTEMPT_MS, left)),
         },
       })

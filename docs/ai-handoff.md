@@ -151,7 +151,7 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 ## AI pipeline
 
-`src/lib/ai/engine.ts` calls Gemini (`gemini-2.5-flash`, JSON schema) when `GEMINI_API_KEY` is set, and `fallback.ts` / `mockBreakdown` otherwise. Failures fall back; they do not 500 the request.
+`src/lib/ai/engine.ts` calls Gemini (`gemini-3.5-flash-lite` first with minimal thinking, JSON schema; see the fallback list in `gemini.ts`) when `GEMINI_API_KEY` is set, and `fallback.ts` / `mockBreakdown` otherwise. Failures fall back; they do not 500 the request.
 
 `sanitizeScheduleChanges` in `schedule-validation.ts` checks real assignment/task ids, positive intervals, local dates, past destinations, waking hours (8am–10pm), and overlaps, including within a batch. Both Gemini and local proposals go through it. The apply API validates references and intervals again and rejects stale proposals targeting a block that is no longer planned. Manual scheduling still permits overlaps and unassigned focus blocks.
 
