@@ -12,7 +12,7 @@ import {
 } from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { sanitizeScheduleChanges } from "../schedule-validation"
-import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, speakTime } from "./fallback"
+import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, speakTime, withRequestedEvent } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
 import {
@@ -61,21 +61,6 @@ function context(data: WeekData, today: string) {
       .map((c) => ({ category: categoryLabel(c), plannedVsActual: Number(c.multiplier.toFixed(2)), samples: c.samples })),
     usuallyPins: pinPreferenceLabel(pinPreferences(data)),
   }
-}
-
-/** Lite models sometimes leave the time off the event the user asked for, or drop it entirely. */
-export function withRequestedEvent(changes: ScheduleChange[], request: ReturnType<typeof parseScheduleRequest>): ScheduleChange[] {
-  if (!request) return changes
-  const fill = (c: ScheduleChange): ScheduleChange => ({
-    ...c,
-    kind: c.kind ?? (c.taskId ? "work" : "life"),
-    title: c.title || request.title,
-    date: c.date ?? request.date,
-    startMin: c.startMin ?? request.startMin,
-    endMin: c.endMin ?? (c.startMin != null ? c.startMin + 60 : request.endMin),
-  })
-  if (changes.some((c) => c.action === "create")) return changes.map((c) => (c.action === "create" ? fill(c) : c))
-  return [fill({ action: "create", reason: "You asked for it." }), ...changes]
 }
 
 export async function adjustSchedule(

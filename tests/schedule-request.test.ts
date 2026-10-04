@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { mockAdjust, parseScheduleRequest } from "../src/lib/ai/fallback"
+import { mockAdjust, parseScheduleRequest, withRequestedEvent } from "../src/lib/ai/fallback"
+import type { ScheduleChange } from "../src/lib/types"
 import { sanitizeScheduleChanges } from "../src/lib/schedule-validation"
 import { event, today, week } from "./fixtures"
 
@@ -32,6 +33,12 @@ test("schedule requests resolve the title, weekday, and time", () => {
   assert.equal(parseScheduleRequest("move my evening work to tomorrow", [], today), null)
 })
 
+test("negated and hypothetical scheduling messages do not force a new event", () => {
+  for (const message of ["don't schedule dinner at 8pm Wednesday", "do not add coffee at 9am tomorrow", "What if I schedule dinner at 8pm?", "Should I schedule a call at 2pm?"]) {
+    assert.equal(parseScheduleRequest(message, [], today), null)
+  }
+})
+
 test("the offline fallback creates the event and moves what is in the way", () => {
   const study = event({ id: "study", kind: "life", projectId: null, taskId: null, title: "Study group", date: wednesday, startMin: 1140, endMin: 1260 })
   const res = mockAdjust(week({ events: [study] }), "I wasn't able to get dinner with sam yesterday. can you schedule something for 8pm on wednesday?", [], { date: today, minute: 600 })
@@ -46,4 +53,36 @@ test("a requested personal event is kept even when nothing makes room for it", (
   assert.equal(sanitizeScheduleChanges([dinner], week({ events: [study] }), { date: today, minute: 600 }).length, 1)
   const work = { action: "create", taskId: "t", projectId: "p", date: wednesday, startMin: 1200, endMin: 1260, reason: "Make-up" }
   assert.equal(sanitizeScheduleChanges([work], week({ events: [study] }), { date: today, minute: 600 }).length, 0)
+})
+
+test("a make-up work create does not replace the dinner the user requested", () => {
+  const request = parseScheduleRequest("schedule dinner with Sam at 8pm Wednesday", [], today)
+  const makeup: ScheduleChange = { action: "create", taskId: "t", projectId: "p", title: "Make-up work", date: wednesday, startMin: 600, endMin: 660, reason: "Catch up" }
+  const changes = withRequestedEvent([makeup], request)
+  assert.equal(changes.length, 2)
+  assert.deepEqual(changes[0], { action: "create", kind: "life", title: "Dinner with Sam", date: wednesday, startMin: 1200, endMin: 1260, reason: "You asked for it." })
+  assert.deepEqual(changes[1], makeup)
+  assert.equal(sanitizeScheduleChanges(changes, week(), { date: today, minute: 600 }).length, 2)
+})
+
+test("only the requested create is filled, at the user's requested date and time", () => {
+  const request = parseScheduleRequest("schedule dinner with Sam at 8pm Wednesday", [], today)
+  const changes: ScheduleChange[] = [
+    { action: "create", title: "Dinner with Sam", startMin: 1260, endMin: 1350, date: "2026-10-08", reason: "Asked" },
+    { action: "create", taskId: "t", projectId: "p", reason: "Make up work" },
+  ]
+  const result = withRequestedEvent(changes, request)
+  assert.equal(result[0].date, wednesday)
+  assert.equal(result[0].startMin, 1200)
+  assert.equal(result[0].endMin, 1290)
+  assert.deepEqual(result[1], changes[1])
+  assert.equal(sanitizeScheduleChanges(result, week(), { date: today, minute: 600 }).length, 1)
+})
+
+test("the local reply acknowledges an overlap when a commitment cannot be moved", () => {
+  const commitment = event({ title: "All-day commitment", kind: "life", taskId: null, projectId: null, date: wednesday, startMin: 360, endMin: 1440 })
+  const result = mockAdjust(week({ events: [commitment] }), "schedule dinner at 8pm Wednesday", [], { date: today, minute: 600 })
+  assert.equal(result.changes.length, 1)
+  assert.match(result.reply, /still an overlap/)
+  assert.doesNotMatch(result.reply, /already free/)
 })

@@ -52,6 +52,8 @@ const PLANS = /\b(breakfast|brunch|lunch|dinner|coffee|drinks|meeting|call|study
 export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
   const lower = message.toLowerCase()
   if (!/\b(schedule|add|book|put|plan|set up|make time)\b/.test(lower)) return null
+  if (/\b(?:don't|dont|do not|never|avoid|stop|not to|not)\s+(?:schedule|add|book|put|plan|set up|make time)\b/.test(lower) ||
+    /\b(?:what if|should (?:i|we))\b/.test(lower)) return null
   const time = lower.match(/\b(?:at|for|around)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/) ??
     lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)/)
   if (!time) return null
@@ -74,6 +76,26 @@ export function parseScheduleRequest(message: string, history: ChatTurn[], today
   const title = named ? named[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bWith\b/, "with") : "New event"
   const startMin = hour * 60 + minute
   return { title, date, startMin, endMin: Math.min(1440, startMin + 60) }
+}
+
+/** Fill the requested event, without mistaking an unrelated make-up block for it. */
+export function withRequestedEvent(changes: ScheduleChange[], request: ReturnType<typeof parseScheduleRequest>): ScheduleChange[] {
+  if (!request) return changes
+  const titleMatches = (c: ScheduleChange) => typeof c.title === "string" &&
+    c.title.trim().toLowerCase().startsWith(request.title.toLowerCase())
+  let index = changes.findIndex((c) => c.action === "create" && (request.title === "New event" || titleMatches(c)))
+  if (index < 0) index = changes.findIndex((c) => c.action === "create" && !c.taskId && c.kind !== "work" &&
+    (!c.title || c.date === request.date && c.startMin === request.startMin))
+  const c: ScheduleChange = index < 0 ? { action: "create", reason: "You asked for it." } : changes[index]
+  const duration = Number.isInteger(c.startMin) && Number.isInteger(c.endMin) && c.endMin! > c.startMin!
+    ? c.endMin! - c.startMin! : c.endMin != null && c.endMin > request.startMin ? c.endMin - request.startMin : request.endMin - request.startMin
+  const filled: ScheduleChange = {
+    ...c, kind: c.kind ?? (c.taskId ? "work" : "life"),
+    title: titleMatches(c) || request.title === "New event" ? c.title || request.title : request.title,
+    date: request.date, startMin: request.startMin, endMin: Math.min(1440, request.startMin + duration),
+    reason: c.reason || "You asked for it.",
+  }
+  return index < 0 ? [filled, ...changes] : changes.map((change, i) => i === index ? filled : change)
 }
 
 /** Moves for planned blocks that a new event lands on and that `changes` leaves in place. */
@@ -115,9 +137,14 @@ function mockScheduleRequest(
   const create: ScheduleChange = { action: "create", kind: "life", title, date, startMin, endMin, reason: "You asked for it." }
   const moves = makeRoom(data, [create], now)
   const moved = moves.map((m) => `${data.events.find((e) => e.id === m.eventId)?.title} to ${speakTime(m.date!, m.startMin!, now.date)}`)
-  const reply = moved.length
+  let reply = moved.length
     ? `${title} is on for ${when}. To make room, I'd slide ${moved.join(" and ")}.`
     : `${title} is on for ${when}. That slot was already free.`
+  const after = applyChanges(data.events, [create, ...moves])
+  if (after.some((e) => data.events.some((original) => original.id === e.id) && e.status !== "skipped" &&
+    e.date === date && e.startMin < endMin && e.endMin > startMin)) {
+    reply = `${title} is on for ${when}.${moved.length ? ` I'd slide ${moved.join(" and ")}.` : ""} There's still an overlap; check the preview before applying it.`
+  }
   return { reply, changes: [create, ...moves], source: "mock" }
 }
 
