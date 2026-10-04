@@ -1,6 +1,6 @@
 import { backtrack, projectHealth, rhythmInsights, type BacktrackStats } from "../analytics"
-import { findOpenSlot } from "../schedule"
-import { addDays, formatClock, formatDuration, weekdayLong } from "../time"
+import { applyChanges, findOpenSlot } from "../schedule"
+import { addDays, formatClock, formatDuration, fromDateKey, weekdayLong } from "../time"
 import type { AdjustResponse, CalendarEvent, ChatTurn, Reflection, ScheduleChange, WeekData } from "../types"
 
 // Deterministic stand-ins for Gemini so the full flow is demoable without an API key.
@@ -45,6 +45,70 @@ function pickTarget(message: string, upcoming: CalendarEvent[], data: WeekData) 
 }
 
 const AFFIRM = /\b(yes|yeah|yep|sure|ok|okay|fine|do it|anyway|please|go ahead)\b/i
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+const PLANS = /\b(breakfast|brunch|lunch|dinner|coffee|drinks|meeting|call|study session|study group|office hours|gym|workout|run|practice|appointment|hangout)\b(\s+with\s+[a-z]+)?/i
+
+/** Reads "schedule something for 8pm on Wednesday" style requests; null when it isn't one. */
+export function parseScheduleRequest(message: string, history: ChatTurn[], today: string) {
+  const lower = message.toLowerCase()
+  if (!/\b(schedule|add|book|put|plan|set up|make time)\b/.test(lower)) return null
+  const time = lower.match(/\b(?:at|for|around)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/) ??
+    lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)/)
+  if (!time) return null
+  let hour = Number(time[1])
+  const minute = Number(time[2] ?? 0)
+  const meridiem = time[3]?.[0]
+  if (hour > 23 || minute > 59) return null
+  if (meridiem === "p" && hour < 12) hour += 12
+  else if (meridiem === "a" && hour === 12) hour = 0
+  else if (!meridiem && hour >= 1 && hour <= 7) hour += 12
+
+  let date = today
+  const weekday = WEEKDAYS.findIndex((d) => lower.includes(d))
+  if (/\btomorrow\b/.test(lower)) date = addDays(today, 1)
+  else if (weekday >= 0) date = addDays(today, (weekday - fromDateKey(today).getDay() + 7) % 7)
+
+  // "can you schedule something" refers back to what the user just described.
+  const said = [message, ...[...history].reverse().filter((t) => t.role === "user").map((t) => t.text)]
+  const named = said.map((t) => t.match(PLANS)).find(Boolean)
+  const title = named ? named[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bWith\b/, "with") : "New event"
+  const startMin = hour * 60 + minute
+  return { title, date, startMin, endMin: Math.min(1440, startMin + 60) }
+}
+
+function mockScheduleRequest(
+  data: WeekData,
+  request: NonNullable<ReturnType<typeof parseScheduleRequest>>,
+  now: { date: string; minute: number },
+): AdjustResponse {
+  const { title, date, startMin, endMin } = request
+  const when = speakTime(date, startMin, now.date)
+  if (date === now.date && startMin < now.minute) {
+    return { reply: `${formatClock(startMin)} has already passed today. Want me to put ${title} somewhere later?`, changes: [], source: "mock" }
+  }
+  const create: ScheduleChange = { action: "create", kind: "life", title, date, startMin, endMin, reason: "You asked for it." }
+  let events = applyChanges(data.events, [create])
+  const moves: ScheduleChange[] = []
+  const dates = windowDates(data, now.date)
+  const clashes = data.events.filter((e) => e.date === date && e.status === "planned" && e.startMin < endMin && e.endMin > startMin)
+  for (const e of clashes) {
+    const length = e.endMin - e.startMin
+    // Earlier the same day keeps the evening intact; otherwise the next open slot.
+    const before = startMin - length >= Math.max(480, date === now.date ? now.minute : 0) &&
+      !events.some((x) => x.id !== e.id && x.date === date && x.status !== "skipped" && x.startMin < startMin && x.endMin > startMin - length)
+    const slot = before ? { date, startMin: startMin - length }
+      : findOpenSlot(events, dates, length, { date, minute: endMin }, e.id)
+    if (!slot) continue
+    const move: ScheduleChange = { action: "move", eventId: e.id, date: slot.date, startMin: slot.startMin, endMin: slot.startMin + length, reason: `Makes room for ${title}.` }
+    moves.push(move)
+    events = applyChanges(events, [move])
+  }
+  const moved = moves.map((m) => `${data.events.find((e) => e.id === m.eventId)?.title} to ${speakTime(m.date!, m.startMin!, now.date)}`)
+  const reply = moved.length
+    ? `${title} is on for ${when}. To make room, I'd slide ${moved.join(" and ")}.`
+    : `${title} is on for ${when}. That slot was already free.`
+  return { reply, changes: [create, ...moves], source: "mock" }
+}
 
 export function mockAdjust(
   data: WeekData,
@@ -52,6 +116,8 @@ export function mockAdjust(
   history: ChatTurn[],
   now: { date: string; minute: number },
 ): AdjustResponse {
+  const request = parseScheduleRequest(message, history, now.date)
+  if (request) return mockScheduleRequest(data, request, now)
   const upcoming = upcomingWork(data, now)
   const target = pickTarget(message, upcoming, data)
   if (!target) {

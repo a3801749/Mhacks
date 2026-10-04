@@ -36,8 +36,11 @@ RULES FOR CHANGES
 - "move": keep the same duration unless asked; set date, startMin, endMin.
 - "shorten": set new startMin/endMin on the same date.
 - "skip": the block is dropped. Prefer moving over skipping when a project deadline is near.
-- "create": add a new block (title, date, startMin, endMin, taskId, projectId) — e.g. to make up time.
-- Never overlap another non-skipped block. Keep blocks between 8:00 (480) and 22:00 (1320).
+- "create": add a new block (title, date, startMin, endMin, kind, taskId, projectId) — e.g. to make up time, or something the user asked for.
+  kind is "life" for personal events (dinner, a call, the gym, a class) and "work" for focus time on a task.
+- When the user asks you to schedule, add, or book something, the FIRST change must be a "create" for exactly that, at the time they asked for (default to one hour, title in Title Case like "Dinner with Sam"). Never answer such a request with only moves. If the time is taken, keep the create and ALSO move or shorten the blocks in the way. The user asking counts as agreement, in every guidance mode.
+- Resolve dates like "Wednesday" to the next such date on or after now.date; "tonight" is now.date.
+- Never overlap another non-skipped block. Keep work blocks between 8:00 (480) and 22:00 (1320); personal events the user asks for may run from 6:00 (360) to midnight (1440).
 - When something has to give, drop "optional" and "flexible" work before "accuracy" work or anything pinned.
 - Prefer time-of-day buckets where the user historically follows through (high actual/planned ratio, few skips).
 - Every change needs a short, human "reason".
@@ -80,6 +83,7 @@ const changeSchema = {
     startMin: { type: "integer" },
     endMin: { type: "integer" },
     title: { type: "string" },
+    kind: { type: "string", enum: ["work", "life"] },
     taskId: { type: "string" },
     projectId: { type: "string" },
     reason: { type: "string" },

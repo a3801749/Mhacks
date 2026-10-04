@@ -58,29 +58,48 @@ export function validateScheduleChanges(changes: unknown, data: WeekData): Sched
   })
 }
 
-/** Model proposals additionally protect past work, waking hours, and occupied slots. */
+/**
+ * Model proposals additionally protect past work, waking hours, and occupied slots.
+ * Models list changes in any order (often the requested event before the move that frees
+ * its slot), so a change that clashes is retried after the others have been applied.
+ */
 export function sanitizeScheduleChanges(changes: unknown, data: WeekData, now: ScheduleNow): ScheduleChange[] {
   if (!Array.isArray(changes)) return []
   let events = data.events
   const out: ScheduleChange[] = []
-  for (const value of changes.slice(0, 100)) {
-    try {
-      const change = normalizeChange(value, { ...data, events })
-      const original = events.find((e) => e.id === change.eventId)
-      if (original && (original.date < now.date || (original.date === now.date && original.endMin <= now.minute))) continue
-      if (change.action !== "skip") {
-        const { date, startMin, endMin } = change as ScheduleChange & { date: string; startMin: number; endMin: number }
-        if (date < now.date || startMin < 480 || endMin > 1320) continue
-        const continuing = change.action === "shorten" && startMin === original?.startMin && endMin > now.minute
-        if (date === now.date && startMin < now.minute && !continuing) continue
-        if (change.action === "move" && date === original?.date && startMin === original.startMin && endMin === original.endMin) continue
-        if (events.some((e) => e.id !== change.eventId && e.status !== "skipped" && e.date === date && e.startMin < endMin && e.endMin > startMin)) continue
+  let pending = changes.slice(0, 100)
+  while (pending.length) {
+    const retry: unknown[] = []
+    for (const value of pending) {
+      let change: ScheduleChange
+      try {
+        change = normalizeChange(value, { ...data, events })
+      } catch {
+        continue // Invalid model output is discarded, rather than reaching persistence.
       }
+      const verdict = check(change, events, now)
+      if (verdict === "drop") continue
+      if (verdict === "clash") { retry.push(value); continue }
       events = applyChanges(events, [change])
       out.push(change)
-    } catch {
-      // Invalid model output is discarded, rather than reaching persistence.
     }
+    if (retry.length === pending.length) break
+    pending = retry
   }
   return out
+}
+
+function check(change: ScheduleChange, events: WeekData["events"], now: ScheduleNow): "ok" | "drop" | "clash" {
+  const original = events.find((e) => e.id === change.eventId)
+  if (original && (original.date < now.date || (original.date === now.date && original.endMin <= now.minute))) return "drop"
+  if (change.action === "skip") return "ok"
+  const { date, startMin, endMin } = change as ScheduleChange & { date: string; startMin: number; endMin: number }
+  // Focus work stays in study hours; personal events the user asks for (a late dinner) may not.
+  const [earliest, latest] = change.action === "create" && change.kind === "life" ? [360, 1440] : [480, 1320]
+  if (date < now.date || startMin < earliest || endMin > latest) return "drop"
+  const continuing = change.action === "shorten" && startMin === original?.startMin && endMin > now.minute
+  if (date === now.date && startMin < now.minute && !continuing) return "drop"
+  if (change.action === "move" && date === original?.date && startMin === original.startMin && endMin === original.endMin) return "drop"
+  if (events.some((e) => e.id !== change.eventId && e.status !== "skipped" && e.date === date && e.startMin < endMin && e.endMin > startMin)) return "clash"
+  return "ok"
 }
