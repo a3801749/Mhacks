@@ -5,7 +5,9 @@ import { getStore } from "@/lib/store"
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/events/[id]/log">) {
   const { id } = await ctx.params
-  const { minutes, note } = (await req.json().catch(() => ({}))) as { minutes: number; note?: string }
+  const body = (await req.json().catch(() => null)) as { minutes: number; note?: string } | null
+  if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid time entry" }, { status: 400 })
+  const { minutes, note } = body
   const mins = Math.round(Number(minutes))
   if (!Number.isFinite(mins) || mins === 0 || Math.abs(mins) > MAX_LOG_MINUTES) {
     return Response.json({ error: `Log between 1 minute and ${MAX_LOG_MINUTES / 60} hours at a time` }, { status: 400 })

@@ -6,7 +6,8 @@ import type { LogPatch } from "@/lib/store/types"
 
 export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/logs/[id]">) {
   const { id } = await ctx.params
-  const body = (await req.json().catch(() => ({}))) as LogPatch
+  const body = (await req.json().catch(() => null)) as LogPatch | null
+  if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid time entry" }, { status: 400 })
   const patch: LogPatch = {}
   if (body.minutes != null) {
     const mins = Math.round(Number(body.minutes))
