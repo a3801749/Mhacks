@@ -1,7 +1,5 @@
 # Tilly — a reflective calendar
 
-> Working name. Rename it in `src/lib/brand.ts`.
-
 Tilly looks back before it plans ahead. Instead of a rigid forward grid, it shows how you **actually** spent your time,
 ties tasks directly to work blocks, and has a voice companion (Tilly) you can talk to when your day blows up.
 Assignments own estimates and reported progress; blocks reserve time and record what happened. Tilly’s suggestions are optional.
@@ -10,17 +8,18 @@ Assignments own estimates and reported progress; blocks reserve time and record 
 
 | Page / feature | What it does | Where |
 | --- | --- | --- |
-| **Today** | Seven days centered on today. A proportional day timeline with planned-vs-actual bars, a live *now* line, and visible add controls in gaps and after the final block. The left rail is a compact overview: classes, drag-to-reorder pinned assignments, and what is due soon; each section scrolls on its own | `today-view.tsx`, `day-view.tsx`, `project-rail.tsx` |
+| **Today** | Seven days centered on today. A proportional day timeline with planned-vs-actual bars, a live *now* line, and add controls that appear when you hover a gap (before the first block, between blocks, or after the last). The left rail is a compact overview: classes, drag-to-reorder pinned assignments, and what is due soon; each section scrolls on its own | `today-view.tsx`, `day-view.tsx`, `project-rail.tsx` |
 | **Agenda** | All assignments and events, filtered by class and category and sorted by due date, priority, pins, progress, or time left. Month calendar shaded green / orange / red by how busy the day is. Schedule a work session or event from the day | `agenda-view.tsx`, `schedule-dialog.tsx` |
 | **Assignments** | Course, category (project, exam, homework, reading, misc), and priority (accuracy, completion, flexible, optional). Notes, pin, assigned/due dates, adaptive estimates | `project-dialog.tsx`, `assignment-bits.tsx` |
 | **Task-integrated blocks** | Edit block title/date/duration, see logged time, edit the progress trail, and report total assignment progress. Change the assignment’s due date or estimate from the same dialog | `block-dialog.tsx` |
 | **Adaptive estimates** | Time left comes from your reported progress and pace, blended with how long finished assignments of the same course + type really took | `estimateProject()` in `src/lib/analytics.ts` |
 | **Daily check-in** (opt-in) | One tap, 1–10, once a day. Feeds "after late nights you rate your day 4.4 vs 7.2" style insights | `check-in-card.tsx`, `moodCorrelation()` |
-| **Plan** | Your Week: create manually, move existing blocks between days, resize, and optionally open Tilly’s suggestions below the manual form | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
+| **Plan** | Your Week: create manually, move existing blocks between days, resize, and optionally open Tilly’s suggestions below the manual form, adding any of them one at a time or all together | `planner-view.tsx`, `plan-dialog.tsx`, `/api/plan` |
 | **Analytics** | Focused-time stat boxes, work by time of day, optional locally calculated patterns, and estimate accuracy | `rhythm-view.tsx` |
 | **Timeline** | Gantt view: assigned → due bars, progress fill starting the day you began, today line, short pace labels, and direct due-date editing through draggable edges or date fields | `timeline-view.tsx` |
 | **Looking back** | Planned vs actual by day and time of day, plus optional Tilly Insights (Gemini or the local engine) with a visibility switch and refresh button: patterns, one-click shifts, and reflection questions | `reflect-panel.tsx` |
-| **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead"); Gemini negotiates, ElevenLabs speaks; accept / decline / undo | `voice-agent.tsx` |
+| **Tilly (voice agent)** | Speak or type ("I'm ordering pizza instead", "schedule dinner with Sam at 8pm Wednesday"); a fast Gemini lite model negotiates, ElevenLabs speaks. Requested events are created along with the moves that make room. Apply, leave out, or undo each change separately, with a preview of the affected days | `voice-agent.tsx`, `proposal-card.tsx` |
+| **Classes** | “Add class” in the header or the Overview rail: a course with weekly lectures, sections, and labs (days, times, room) until the last day of class | `course-dialog.tsx` |
 | **Guidance modes** | *Anchor* (strict baseline), *Lighthouse* (proposes, you approve), *Tide* (applies automatically) | `settings-dialog.tsx` |
 
 Personal events support location, meeting links, notes, and custom daily/weekly/monthly/yearly repeats. Edit or delete one occurrence, following occurrences, or a whole series.
