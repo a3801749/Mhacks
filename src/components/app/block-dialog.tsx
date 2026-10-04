@@ -7,20 +7,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { estimateProject, taskLogged } from "@/lib/analytics"
 import { Slider } from "@/components/ui/slider"
+import { SelectField } from "@/components/ui/select-field"
 import { AGENT_NAME } from "@/lib/brand"
 import { formatDuration, formatRange, MAX_LOG_MINUTES, monthDay, weekdayShort } from "@/lib/time"
 import type { CalendarEvent, Project, TimeLog, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import type { WeekApi } from "@/hooks/use-week"
+import { BlockForm } from "./block-form"
+import { useApp } from "./app-shell"
+import { recurrenceSummary } from "@/lib/recurrence"
 import { PlannedVsActual } from "./block-card"
-
-function momentumLine(logged: number, estimate: number, sessions: number) {
-  if (logged === 0) return "Fresh start. Even 15 minutes counts as momentum."
-  const pct = Math.round((logged / estimate) * 100)
-  if (pct >= 100) return `You've put in ${formatDuration(logged)} — past the estimate. It might be closer to done than it feels.`
-  if (pct >= 60) return `${pct}% of the way there across ${sessions} session${sessions === 1 ? "" : "s"}. The finish line is in view.`
-  return `${formatDuration(logged)} in already across ${sessions} session${sessions === 1 ? "" : "s"}. You're not starting from zero.`
-}
 
 /** Accepts "2.745", "1:30", "1h 30m", "90m". Returns minutes, or null when unparseable. */
 export function parseDuration(input: string, unit: "hr" | "min"): number | null {
@@ -74,6 +70,8 @@ function BlockBody({
   onOpenChange: (open: boolean) => void
   onAskAgent: (message: string) => void
 }) {
+  const { editProject } = useApp()
+  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [askProgress, setAskProgress] = useState(false)
   const project = data.projects.find((p) => p.id === live.projectId)
@@ -84,9 +82,8 @@ function BlockBody({
     ? data.logs.filter((l) => l.taskId === task.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     : []
   const logged = task ? taskLogged(task.id, data.logs) : 0
-  const pct = task ? Math.min(100, Math.round((logged / task.estimateMinutes) * 100)) : 0
   const canLog = live.kind === "work" && live.status !== "skipped"
-  const showProgress = project && !project.completedDate && live.kind === "work"
+  const showProgress = project && live.kind === "work"
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key)
@@ -111,6 +108,19 @@ function BlockBody({
       </div>
 
       <div className="space-y-5 px-5 pb-5">
+        <div className="flex flex-wrap gap-2 pt-3">
+          <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}><Pencil />{editing ? "Close editor" : "Edit block"}</Button>
+          {project && <Button variant="ghost" size="sm" onClick={() => { onOpenChange(false); editProject(project) }}>Edit assignment · due date & estimate</Button>}
+        </div>
+        {editing && <BlockForm key={`${live.id}-${live.date}-${live.startMin}-${live.endMin}`} event={live} draft={{ date: live.date }} onDone={() => { setEditing(false); onOpenChange(false) }} />}
+        {!editing && <>
+        {(live.location || live.meetingUrl || live.notes || live.seriesId) && <div className="space-y-1 rounded-md border p-3 text-sm">
+          {live.location && <p>{live.location}</p>}
+          {live.meetingUrl && <a href={live.meetingUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-primary underline underline-offset-2">Open meeting link</a>}
+          {live.notes && <p className="whitespace-pre-wrap text-muted-foreground">{live.notes}</p>}
+          {live.seriesId && <p className="text-xs text-muted-foreground">{(() => { const series = data.series.find((s) => s.id === live.seriesId); return series ? recurrenceSummary(series.rule) : "Repeating event" })()}</p>}
+        </div>}
+
         {askProgress && project && !project.completedDate && (
           <ProgressReport
             project={project}
@@ -122,29 +132,10 @@ function BlockBody({
           />
         )}
 
-        {task ? (
-          <section className="rounded-lg border bg-background p-4">
-            <div className="flex items-center gap-4">
-              <ProgressRing percent={pct} color={color} />
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Time on this task so far</p>
-                <p className="font-heading text-2xl font-medium tabular-nums">
-                  {formatDuration(logged)}
-                  <span className="ml-1 text-sm font-normal text-muted-foreground">
-                    of ~{formatDuration(task.estimateMinutes)}
-                  </span>
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {momentumLine(logged, task.estimateMinutes, logs.length)}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : live.kind === "life" ? (
-          <p className="rounded-lg bg-secondary p-4 text-sm text-secondary-foreground">
-            Life blocks aren&apos;t tracked against goals. They&apos;re here so your plan stays honest about your time.
-          </p>
-        ) : null}
+        {task && <section className="rounded-lg border bg-background p-4">
+          <p className="text-xs text-muted-foreground">Focused time on this task</p>
+          <p className="font-heading text-2xl font-medium tabular-nums">{formatDuration(logged)}</p>
+        </section>}
 
         <section>
           <h3 className="mb-2 text-sm font-medium">This block</h3>
@@ -153,7 +144,7 @@ function BlockBody({
 
         {canLog && <LogTime event={live} api={api} />}
 
-        {showProgress && !askProgress && <ProgressReport key={project.id} project={project} data={data} api={api} />}
+        {showProgress && !askProgress && <ProgressReport key={`${project.id}-${project.progressPercent}`} project={project} data={data} api={api} />}
 
         {logs.length > 0 && <ProgressTrail logs={logs} color={color} api={api} />}
 
@@ -169,7 +160,7 @@ function BlockBody({
               <MessageCircleHeart /> Not feeling it — ask {AGENT_NAME}
             </Button>
           )}
-          {live.status === "planned" && (
+          {live.status !== "skipped" && (
             <Button
               variant="ghost"
               disabled={busy !== null}
@@ -215,6 +206,7 @@ function BlockBody({
             )
           )}
         </div>
+        </>}
       </div>
     </>
   )
@@ -309,15 +301,7 @@ function LogTime({ event, api }: { event: CalendarEvent; api: WeekApi }) {
           onChange={(e) => setAmount(e.target.value)}
           className="h-8 w-24"
         />
-        <select
-          aria-label="Unit"
-          value={unit}
-          onChange={(e) => setUnit(e.target.value as "hr" | "min")}
-          className="h-8 rounded-md border bg-background px-1.5 text-sm"
-        >
-          <option value="hr">hr</option>
-          <option value="min">min</option>
-        </select>
+        <SelectField label="Unit" value={unit} onValueChange={setUnit} options={[{ value: "hr", label: "hr" }, { value: "min", label: "min" }]} className="h-8 w-20" />
         <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !parsed || Boolean(error)}>
           {busy === "custom" && <Loader2 className="animate-spin" />}
           {direction === "add" ? "Log" : "Take off"}
@@ -432,38 +416,6 @@ function TrailEditor({ log, api, onDone }: { log: TimeLog; api: WeekApi; onDone:
   )
 }
 
-function ProgressRing({ percent, color }: { percent: number; color: string }) {
-  const r = 26
-  const c = 2 * Math.PI * r
-  return (
-    <svg viewBox="0 0 64 64" className="size-16 shrink-0 -rotate-90" aria-label={`${percent}% of estimate`}>
-      <circle cx="32" cy="32" r={r} fill="none" strokeWidth="7" className="stroke-muted" />
-      <circle
-        cx="32"
-        cy="32"
-        r={r}
-        fill="none"
-        strokeWidth="7"
-        strokeLinecap="round"
-        stroke={color}
-        strokeDasharray={c}
-        strokeDashoffset={c * (1 - percent / 100)}
-        className="transition-[stroke-dashoffset] duration-700"
-      />
-      <text
-        x="32"
-        y="32"
-        textAnchor="middle"
-        dominantBaseline="central"
-        className="rotate-90 fill-foreground text-[13px] font-medium"
-        style={{ transformOrigin: "32px 32px" }}
-      >
-        {percent}%
-      </text>
-    </svg>
-  )
-}
-
 export function ProgressReport({
   project,
   data,
@@ -515,13 +467,13 @@ export function ProgressReport({
             disabled={saving || !dirty}
             onClick={async () => {
               setSaving(true)
-              const ok = await api.updateProject(project.id, { progressPercent: value }, "Progress saved — estimate updated")
+              const ok = await api.updateProject(project.id, { progressPercent: value, ...(project.completedDate && value < 100 ? { completedDate: null } : {}) }, "Assignment progress saved")
               setSaving(false)
               if (ok) onSaved?.()
             }}
           >
             {saving && <Loader2 className="animate-spin" />}
-            Save progress
+            {project.completedDate && value < 100 ? "Save progress & reopen" : "Save progress"}
           </Button>
           {highlight && (
             <Button size="sm" variant="ghost" onClick={onSaved}>

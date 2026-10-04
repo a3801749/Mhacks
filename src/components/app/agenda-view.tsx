@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { CalendarPlus, ChevronLeft, ChevronRight, NotebookText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SelectField } from "@/components/ui/select-field"
 import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
 import { dayLoad, projectHealth, type Busyness, type Pace } from "@/lib/analytics"
 import { addDays, daysBetween, formatRange, fromDateKey, monthDay, toDateKey, weekdayLong, weekdayShort } from "@/lib/time"
@@ -150,17 +151,7 @@ export function AgendaView() {
                   </label>
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     Sort
-                    <select
-                      value={sort}
-                      onChange={(e) => setSort(e.target.value as SortKey)}
-                      className="h-7 rounded-md border bg-background px-1.5 text-xs text-foreground"
-                    >
-                      {SORTS.map((s) => (
-                        <option key={s.key} value={s.key}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
+                    <SelectField value={sort} onValueChange={setSort} label="Sort assignments" options={SORTS.map((s) => ({ value: s.key, label: s.label }))} className="h-8 w-40 text-sm text-foreground" />
                   </label>
                 </>
               )}
@@ -384,10 +375,12 @@ function MiniCalendar({
   selected: string
   onSelect: (d: string) => void
 }) {
+  const { api: { ensureThrough } } = useApp()
   const [month, setMonth] = useState(() => selected.slice(0, 7) + "-01")
   const first = fromDateKey(month)
   const lead = first.getDay()
   const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
+  useEffect(() => { ensureThrough(addDays(month, daysInMonth - 1)) }, [ensureThrough, month, daysInMonth])
   const cells: (string | null)[] = [
     ...Array.from({ length: lead }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => addDays(month, i)),

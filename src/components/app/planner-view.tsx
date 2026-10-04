@@ -184,7 +184,7 @@ export function PlannerView() {
         </div>
       </div>
 
-      <PlanDialog block={block} onClose={() => setBlock(null)} days={days} />
+      <PlanDialog block={block} onClose={() => setBlock(null)} />
     </div>
   )
 }

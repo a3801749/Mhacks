@@ -1,10 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { formatDuration, nowMinutes, toDateKey } from "@/lib/time"
-import type { EventPatch, NewProject, ProjectPatch } from "@/lib/store/types"
-import type { AppliedWeek, Integrations, ScheduleChange, Settings, WeekData } from "@/lib/types"
+import { addDays, formatDuration, nowMinutes, toDateKey } from "@/lib/time"
+import type { EventPatch, NewSeries, NewProject, ProjectPatch } from "@/lib/store/types"
+import type { AppliedWeek, Integrations, ScheduleChange, Settings, SeriesScope, WeekData } from "@/lib/types"
 
 export type LoadedWeek = WeekData & { integrations?: Integrations }
 
@@ -36,13 +36,19 @@ export function useWeek(today: string | null) {
   const [data, setData] = useState<LoadedWeek | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [integrations, setIntegrations] = useState<Integrations | null>(null)
+  const mutationQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const revision = useRef(0)
+  const loadedThrough = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     if (!today) return
     setError(null)
+    const version = revision.current
     try {
       const week = await request<LoadedWeek>(`/api/week?today=${today}`)
+      if (version !== revision.current) return
       setData(week)
+      loadedThrough.current = addDays(today, 366)
       if (week.integrations) setIntegrations(week.integrations)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load your calendar")
@@ -54,7 +60,9 @@ export function useWeek(today: string | null) {
     load()
   }, [load])
 
-  const mutate = useCallback(async <T extends WeekData,>(fn: () => Promise<T>, success?: string) => {
+  const mutate = useCallback(<T extends WeekData,>(fn: () => Promise<T>, success?: string): Promise<T | null> => {
+    revision.current += 1
+    const operation = mutationQueue.current.then(async () => {
     try {
       const next = await fn()
       setData((prev) => ({ ...next, integrations: prev?.integrations }))
@@ -64,7 +72,22 @@ export function useWeek(today: string | null) {
       toast.error(err instanceof Error ? err.message : "That didn't save")
       return null
     }
+    })
+    mutationQueue.current = operation
+    return operation
   }, [])
+
+  const ensureThrough = useCallback(async (through: string) => {
+    if (!today || through <= (loadedThrough.current ?? addDays(today, 366))) return
+    const version = revision.current
+    try {
+      const next = await request<LoadedWeek>(`/api/week?today=${today}&through=${through}`)
+      if (version === revision.current) {
+        setData(next)
+        loadedThrough.current = through
+      }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Couldn't load that month") }
+  }, [today])
 
   const json = (body: unknown) => JSON.stringify(body)
 
@@ -73,6 +96,7 @@ export function useWeek(today: string | null) {
     error,
     integrations,
     reload: load,
+    ensureThrough,
     replace: (next: WeekData) => setData((prev) => ({ ...next, integrations: prev?.integrations })),
     logTime: (eventId: string, minutes: number, note: string) =>
       mutate(
@@ -95,7 +119,13 @@ export function useWeek(today: string | null) {
       return mutate(() => request<WeekData>(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
     },
     updateEvent: (eventId: string, patch: EventPatch, msg?: string) =>
-      mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
+      mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
+    createSeries: (input: NewSeries, replaceEventId?: string) =>
+      mutate(() => request<WeekData>("/api/event-series", { method: "POST", body: json({ ...input, today, replaceEventId }) }), "Repeating event added"),
+    editSeries: (eventId: string, input: NewSeries, scope: "following" | "all") =>
+      mutate(() => request<WeekData>(`/api/events/${eventId}/series`, { method: "PATCH", body: json({ ...input, scope, today }) }), "Repeating events updated"),
+    removeEvents: (eventId: string, scope: SeriesScope) =>
+      mutate(() => request<WeekData>(`/api/events/${eventId}/series`, { method: "DELETE", body: json({ scope, today }) }), "Removed from your calendar"),
     deleteEvent: (eventId: string) =>
       mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "DELETE" })),
     setTaskDone: (taskId: string, done: boolean) =>
