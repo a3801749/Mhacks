@@ -12,7 +12,7 @@ import {
 } from "../analytics"
 import type { AdjustResponse, ChatTurn, PlanBreakdown, PlanSegment, Reflection, ScheduleChange, WeekData } from "../types"
 import { sanitizeScheduleChanges } from "../schedule-validation"
-import { mockAdjust, mockReflect } from "./fallback"
+import { makeRoom, mockAdjust, mockReflect, parseScheduleRequest, speakTime } from "./fallback"
 import { generateJson, geminiEnabled } from "./gemini"
 import { mockBreakdown, planCandidates, recentMood, freeIntervals, sanitizeSegments, type PlanBlock } from "./planner"
 import {
@@ -63,6 +63,21 @@ function context(data: WeekData, today: string) {
   }
 }
 
+/** Lite models sometimes leave the time off the event the user asked for, or drop it entirely. */
+export function withRequestedEvent(changes: ScheduleChange[], request: ReturnType<typeof parseScheduleRequest>): ScheduleChange[] {
+  if (!request) return changes
+  const fill = (c: ScheduleChange): ScheduleChange => ({
+    ...c,
+    kind: c.kind ?? (c.taskId ? "work" : "life"),
+    title: c.title || request.title,
+    date: c.date ?? request.date,
+    startMin: c.startMin ?? request.startMin,
+    endMin: c.endMin ?? (c.startMin != null ? c.startMin + 60 : request.endMin),
+  })
+  if (changes.some((c) => c.action === "create")) return changes.map((c) => (c.action === "create" ? fill(c) : c))
+  return [fill({ action: "create", reason: "You asked for it." }), ...changes]
+}
+
 export async function adjustSchedule(
   data: WeekData,
   message: string,
@@ -83,7 +98,17 @@ export async function adjustSchedule(
         },
         ADJUST_RESPONSE_SCHEMA,
       )
-      return { reply: out.reply, changes: sanitizeScheduleChanges(out.changes, data, now), source: "gemini" }
+      const request = parseScheduleRequest(message, history, now.date)
+      let changes = sanitizeScheduleChanges(withRequestedEvent(out.changes ?? [], request), data, now)
+      let reply = out.reply
+      if (request) {
+        const room = makeRoom(data, changes, now)
+        changes = sanitizeScheduleChanges([...changes, ...room], data, now)
+        const added = changes.filter((c) => room.some((m) => m.eventId === c.eventId))
+          .map((c) => `${data.events.find((e) => e.id === c.eventId)?.title} to ${speakTime(c.date!, c.startMin!, now.date)}`)
+        if (added.length) reply = `${reply} To make room, I'd slide ${added.join(" and ")}.`
+      }
+      return { reply, changes, source: "gemini" }
     } catch (err) {
       console.error("[gemini] adjust failed, using fallback:", err)
     }

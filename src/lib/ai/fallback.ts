@@ -11,7 +11,7 @@ function bestBucket(stats: BacktrackStats) {
   return { best: entries[0], worst: entries[entries.length - 1] }
 }
 
-function speakTime(date: string, min: number, today: string) {
+export function speakTime(date: string, min: number, today: string) {
   const day = date === today ? "today" : date === addDays(today, 1) ? "tomorrow" : weekdayLong(date)
   return `${formatClock(min).replace("am", " a.m.").replace("pm", " p.m.")} ${day}`
 }
@@ -76,6 +76,32 @@ export function parseScheduleRequest(message: string, history: ChatTurn[], today
   return { title, date, startMin, endMin: Math.min(1440, startMin + 60) }
 }
 
+/** Moves for planned blocks that a new event lands on and that `changes` leaves in place. */
+export function makeRoom(data: WeekData, changes: ScheduleChange[], now: { date: string; minute: number }): ScheduleChange[] {
+  const create = changes.find((c) => c.action === "create" && c.date && c.startMin != null && c.endMin != null)
+  if (!create) return []
+  const { date, startMin, endMin, title } = create as ScheduleChange & { date: string; startMin: number; endMin: number }
+  const touched = new Set(changes.map((c) => c.eventId))
+  let events = applyChanges(data.events, changes)
+  const moves: ScheduleChange[] = []
+  const dates = windowDates(data, now.date)
+  const clashes = events.filter((e) => e.date === date && e.status === "planned" && !touched.has(e.id) &&
+    data.events.some((x) => x.id === e.id) && e.startMin < endMin && e.endMin > startMin)
+  for (const e of clashes) {
+    const length = e.endMin - e.startMin
+    // Earlier the same day keeps the evening intact; otherwise the next open slot.
+    const before = startMin - length >= Math.max(480, date === now.date ? now.minute : 0) &&
+      !events.some((x) => x.id !== e.id && x.date === date && x.status !== "skipped" && x.startMin < startMin && x.endMin > startMin - length)
+    const slot = before ? { date, startMin: startMin - length }
+      : findOpenSlot(events, dates, length, { date, minute: endMin }, e.id)
+    if (!slot) continue
+    const move: ScheduleChange = { action: "move", eventId: e.id, date: slot.date, startMin: slot.startMin, endMin: slot.startMin + length, reason: `Makes room for ${title ?? "your plans"}.` }
+    moves.push(move)
+    events = applyChanges(events, [move])
+  }
+  return moves
+}
+
 function mockScheduleRequest(
   data: WeekData,
   request: NonNullable<ReturnType<typeof parseScheduleRequest>>,
@@ -87,22 +113,7 @@ function mockScheduleRequest(
     return { reply: `${formatClock(startMin)} has already passed today. Want me to put ${title} somewhere later?`, changes: [], source: "mock" }
   }
   const create: ScheduleChange = { action: "create", kind: "life", title, date, startMin, endMin, reason: "You asked for it." }
-  let events = applyChanges(data.events, [create])
-  const moves: ScheduleChange[] = []
-  const dates = windowDates(data, now.date)
-  const clashes = data.events.filter((e) => e.date === date && e.status === "planned" && e.startMin < endMin && e.endMin > startMin)
-  for (const e of clashes) {
-    const length = e.endMin - e.startMin
-    // Earlier the same day keeps the evening intact; otherwise the next open slot.
-    const before = startMin - length >= Math.max(480, date === now.date ? now.minute : 0) &&
-      !events.some((x) => x.id !== e.id && x.date === date && x.status !== "skipped" && x.startMin < startMin && x.endMin > startMin - length)
-    const slot = before ? { date, startMin: startMin - length }
-      : findOpenSlot(events, dates, length, { date, minute: endMin }, e.id)
-    if (!slot) continue
-    const move: ScheduleChange = { action: "move", eventId: e.id, date: slot.date, startMin: slot.startMin, endMin: slot.startMin + length, reason: `Makes room for ${title}.` }
-    moves.push(move)
-    events = applyChanges(events, [move])
-  }
+  const moves = makeRoom(data, [create], now)
   const moved = moves.map((m) => `${data.events.find((e) => e.id === m.eventId)?.title} to ${speakTime(m.date!, m.startMin!, now.date)}`)
   const reply = moved.length
     ? `${title} is on for ${when}. To make room, I'd slide ${moved.join(" and ")}.`

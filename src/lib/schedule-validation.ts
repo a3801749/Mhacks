@@ -11,7 +11,9 @@ export interface ScheduleNow {
 
 function normalizeChange(value: unknown, data: WeekData): ScheduleChange {
   if (!value || typeof value !== "object") throw new Error("Invalid schedule change")
-  const c = value as ScheduleChange
+  const raw = value as ScheduleChange
+  // Models fill optional ids with "" rather than leaving them out.
+  const c = { ...raw, taskId: raw.taskId === "" ? null : raw.taskId, projectId: raw.projectId === "" ? null : raw.projectId }
   if (!["create", "move", "shorten", "skip"].includes(c.action)) throw new Error("Unknown schedule action")
   if (typeof c.reason !== "string") throw new Error("A schedule change needs a reason")
   if (c.date !== undefined && !validDate(c.date)) throw new Error("Invalid block date")
@@ -83,7 +85,16 @@ export function sanitizeScheduleChanges(changes: unknown, data: WeekData, now: S
       events = applyChanges(events, [change])
       out.push(change)
     }
-    if (retry.length === pending.length) break
+    if (retry.length === pending.length) {
+      // A personal event the user asked for is still worth proposing; the preview flags the overlap.
+      for (const value of retry) {
+        const change = normalizeChange(value, { ...data, events })
+        if (change.action !== "create" || change.kind !== "life" || check(change, [], now) !== "ok") continue
+        events = applyChanges(events, [change])
+        out.push(change)
+      }
+      break
+    }
     pending = retry
   }
   return out

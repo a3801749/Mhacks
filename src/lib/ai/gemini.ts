@@ -11,8 +11,8 @@ const MODELS = [
       .filter(Boolean) as string[],
   ),
 ]
-const ATTEMPT_MS = 10_000
-const BUDGET_MS = 25_000
+const ATTEMPT_MS = 6_000
+const BUDGET_MS = 18_000
 
 let client: GoogleGenAI | null = null
 

@@ -5,7 +5,8 @@ const MODE_RULES: Record<GuidanceMode, string> = {
   anchor: `GUIDANCE MODE: ANCHOR (strict baseline).
 - The user's plan is the baseline. Gently push back once before agreeing to move anything.
 - Offer the smallest possible concession first (e.g. "can you do 25 minutes instead of 90?").
-- Only return changes the user has explicitly agreed to in this turn. Otherwise return an empty "changes" array and ask.`,
+- Only return changes the user has explicitly agreed to in this turn. Otherwise return an empty "changes" array and ask.
+- Exception: when the user asks you to schedule something, return the "create" for it, plus moves for any blocks it would overlap.`,
   coach: `GUIDANCE MODE: COACH (propose, user approves).
 - Negotiate like a supportive friend. Propose a concrete adjustment immediately.
 - Return the proposed changes; the user will approve or decline them in the UI.`,
@@ -38,7 +39,7 @@ RULES FOR CHANGES
 - "skip": the block is dropped. Prefer moving over skipping when a project deadline is near.
 - "create": add a new block (title, date, startMin, endMin, kind, taskId, projectId) — e.g. to make up time, or something the user asked for.
   kind is "life" for personal events (dinner, a call, the gym, a class) and "work" for focus time on a task.
-- When the user asks you to schedule, add, or book something, the FIRST change must be a "create" for exactly that, at the time they asked for (default to one hour, title in Title Case like "Dinner with Sam"). Never answer such a request with only moves. If the time is taken, keep the create and ALSO move or shorten the blocks in the way. The user asking counts as agreement, in every guidance mode.
+- When the user asks you to schedule, add, or book something, the FIRST change must be a "create" for exactly that, at the time they asked for (default to one hour, title in Title Case like "Dinner with Sam"). Never answer such a request with only moves. Check the schedule for planned blocks that overlap the requested time; keep the create and ALSO move or shorten each one (earlier the same day is usually best). Your reply must mention every block you move. The user asking counts as agreement, in every guidance mode.
 - Resolve dates like "Wednesday" to the next such date on or after now.date; "tonight" is now.date.
 - Never overlap another non-skipped block. Keep work blocks between 8:00 (480) and 22:00 (1320); personal events the user asks for may run from 6:00 (360) to midnight (1440).
 - When something has to give, drop "optional" and "flexible" work before "accuracy" work or anything pinned.

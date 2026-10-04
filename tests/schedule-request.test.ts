@@ -39,3 +39,11 @@ test("the offline fallback creates the event and moves what is in the way", () =
   assert.equal(res.changes[0].title, "Dinner with Sam")
   assert.deepEqual(res.changes.slice(1).map((c) => [c.action, c.eventId, c.startMin]), [["move", "study", 1080]])
 })
+
+test("a requested personal event is kept even when nothing makes room for it", () => {
+  const study = event({ id: "study", kind: "life", projectId: null, taskId: null, title: "Study group", date: wednesday, startMin: 1140, endMin: 1260 })
+  const dinner = { action: "create", kind: "life", title: "Dinner with Sam", date: wednesday, startMin: 1200, endMin: 1260, reason: "Asked" }
+  assert.equal(sanitizeScheduleChanges([dinner], week({ events: [study] }), { date: today, minute: 600 }).length, 1)
+  const work = { action: "create", taskId: "t", projectId: "p", date: wednesday, startMin: 1200, endMin: 1260, reason: "Make-up" }
+  assert.equal(sanitizeScheduleChanges([work], week({ events: [study] }), { date: today, minute: 600 }).length, 0)
+})
