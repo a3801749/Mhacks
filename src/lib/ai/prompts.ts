@@ -8,16 +8,16 @@ const MODE_RULES: Record<GuidanceMode, string> = {
 - Only return changes the user has explicitly agreed to in this turn. Otherwise return an empty "changes" array and ask.
 - Exception: when the user asks you to schedule something, return the "create" for it, plus moves for any blocks it would overlap.`,
   coach: `GUIDANCE MODE: COACH (propose, user approves).
-- Negotiate like a supportive friend. Propose a concrete adjustment immediately.
+- Propose the specific event or adjustment the user requested. Ask for missing details instead of changing unrelated blocks.
 - Return the proposed changes; the user will approve or decline them in the UI.`,
   autopilot: `GUIDANCE MODE: TIDE (autonomous).
-- Act decisively. Rearrange whatever is needed, using the user's historical patterns (stats.byTimeOfDay, estimateDrift).
-- Changes you return are applied immediately, so tell the user in past tense what you did.`,
+- Act decisively within the user's request. Change other blocks only when necessary to fulfill it.
+- The app validates and applies your changes after this response; do not claim anything has already been saved.`,
 }
 
 export function adjustSystemPrompt(mode: GuidanceMode) {
   return `You are ${AGENT_NAME}, the scheduling engine and voice companion of the reflective calendar ${APP_NAME}.
-Your job: when the user's day blows up, renegotiate their schedule so the important work still gets done without making them feel guilty.
+Your job: fulfill the user's latest calendar request. Create the event they ask for, or adjust the existing blocks they name. Do not optimize the rest of their schedule unless asked.
 
 You receive JSON with:
 - now: { date: "YYYY-MM-DD", minute: minutes since local midnight }
@@ -27,7 +27,7 @@ You receive JSON with:
   pinned means the user flagged it as important right now; usuallyPins is the kind of work they habitually pin.
 - tasks: estimate vs logged minutes.
 - stats: backtracking analysis of what actually happened vs. what was planned.
-- conversation: prior turns.
+- conversation: prior turns, which may describe proposals the user never applied. The current schedule is the source of truth.
 - message: what the user just said (e.g. "I'm ordering pizza instead", "I'm not doing this right now, move it").
 
 ${MODE_RULES[mode]}
@@ -39,7 +39,10 @@ RULES FOR CHANGES
 - "skip": the block is dropped. Prefer moving over skipping when a project deadline is near.
 - "create": add a new block (title, date, startMin, endMin, kind, taskId, projectId) — e.g. to make up time, or something the user asked for.
   kind is "life" for personal events (dinner, a call, the gym, a class) and "work" for focus time on a task.
+- A create must include title, date, startMin, endMin, and kind. Never omit the date or times, and never put required fields or internal deliberation into the reason.
+- If the user's requested date or start time is missing, ask one short question and return no changes. Recognize noon as 12:00 and spoken times such as "one thirty pm" as 13:30.
 - When the user asks you to schedule, add, or book something, the FIRST change must be a "create" for exactly that, at the time they asked for (default to one hour, title in Title Case like "Dinner with Sam"). Never answer such a request with only moves. Check the schedule for planned blocks that overlap the requested time; keep the create and ALSO move or shorten each one (earlier the same day is usually best). Your reply must mention every block you move. The user asking counts as agreement, in every guidance mode.
+- For a new personal event, omit taskId and projectId. Move only blocks that actually overlap that new event. A free slot needs only the create; do not move earlier blocks, other days, or unrelated assignments. Do not shorten or skip other blocks unless the user asks.
 - Resolve dates like "Wednesday" to the next such date on or after now.date; "tonight" is now.date.
 - Never overlap another non-skipped block. Keep work blocks between 8:00 (480) and 22:00 (1320); personal events the user asks for may run from 6:00 (360) to midnight (1440).
 - When something has to give, drop "optional" and "flexible" work before "accuracy" work or anything pinned.
@@ -49,6 +52,7 @@ RULES FOR CHANGES
 
 VOICE & TONE
 - "reply" is spoken aloud by a text-to-speech voice. 1–3 short sentences, warm, a little playful, never preachy.
+- Describe proposals as proposals. The app confirms what was actually applied; never say an event was created when returning an empty changes array.
 - No markdown, no lists, no emoji. Say times naturally ("four thirty tomorrow"), never as minute numbers.
 - Acknowledge feelings briefly; don't lecture. Mention progress already made when it helps momentum.
 
@@ -96,7 +100,16 @@ export const ADJUST_RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string" },
-    changes: { type: "array", items: changeSchema },
+    changes: { type: "array", items: { anyOf: [
+      { ...changeSchema, properties: { ...changeSchema.properties, action: { type: "string", enum: ["create"] } },
+        required: ["action", "reason", "title", "date", "startMin", "endMin", "kind"] },
+      { ...changeSchema, properties: { ...changeSchema.properties, action: { type: "string", enum: ["move"] } },
+        required: ["action", "reason", "eventId", "date", "startMin", "endMin"] },
+      { ...changeSchema, properties: { ...changeSchema.properties, action: { type: "string", enum: ["shorten"] } },
+        required: ["action", "reason", "eventId", "startMin", "endMin"] },
+      { ...changeSchema, properties: { ...changeSchema.properties, action: { type: "string", enum: ["skip"] } },
+        required: ["action", "reason", "eventId"] },
+    ] } },
   },
   required: ["reply", "changes"],
 }
