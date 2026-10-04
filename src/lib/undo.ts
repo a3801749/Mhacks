@@ -10,6 +10,7 @@ export function scheduleUndo(before: CalendarEvent[], current: CalendarEvent[], 
       date: e.date, startMin: e.startMin, endMin: e.endMin,
       status: live && live.actualMinutes !== e.actualMinutes ? statusForActual(live.actualMinutes, e.endMin - e.startMin) : e.status,
       movedFromDate: e.movedFromDate, movedFromStartMin: e.movedFromStartMin,
+      isException: e.isException,
     }
     return { id: e.id, patch }
   })

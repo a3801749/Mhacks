@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- Planned vs. actual: start/end are the plan, actual_minutes is what really happened.
+CREATE TABLE IF NOT EXISTS event_series (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  definition JSONB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
   id                   TEXT PRIMARY KEY,
   user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -59,7 +65,13 @@ CREATE TABLE IF NOT EXISTS events (
   actual_minutes       INTEGER NOT NULL DEFAULT 0,
   kind                 TEXT NOT NULL DEFAULT 'work' CHECK (kind IN ('work', 'life')),
   moved_from_date      DATE,
-  moved_from_start_min INTEGER
+  moved_from_start_min INTEGER,
+  location TEXT NOT NULL DEFAULT '',
+  meeting_url TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  series_id TEXT REFERENCES event_series(id) ON DELETE SET NULL,
+  occurrence_date DATE,
+  is_exception BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS events_user_date_idx ON events (user_id, date);
 
@@ -89,6 +101,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_planner_enabled BOOLEAN NOT NULL D
 ALTER TABLE users ADD COLUMN IF NOT EXISTS today_insights_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_patterns_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS screen_time_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS location TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS meeting_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS series_id TEXT REFERENCES event_series(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS occurrence_date DATE;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS is_exception BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS events_series_occurrence_idx ON events (series_id, occurrence_date);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS course TEXT NOT NULL DEFAULT 'General';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'project';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS assigned_date DATE NOT NULL DEFAULT CURRENT_DATE;

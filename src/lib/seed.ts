@@ -179,6 +179,7 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
       kind: tpl.kind ?? "work",
       movedFromDate: null,
       movedFromStartMin: null,
+        location: "", meetingUrl: "", notes: "", seriesId: null, occurrenceDate: null, isException: false,
     })
     if (task && tpl.actual > 0) {
       logs.push({
@@ -262,6 +263,7 @@ export function buildSeed(today = toDateKey(new Date())): Omit<WeekData, "source
     projects,
     tasks: SEED_TASKS.map((t) => ({ ...t })),
     events,
+    series: [],
     logs,
     checkIns,
     settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, todayInsightsEnabled: true, analyticsPatternsEnabled: true, screenTimeEnabled: false },

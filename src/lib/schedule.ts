@@ -21,11 +21,13 @@ export function applyChanges(events: CalendarEvent[], changes: ScheduleChange[])
         kind: change.kind ?? (change.taskId ? "work" : "life"),
         movedFromDate: null,
         movedFromStartMin: null,
+        location: change.location ?? "", meetingUrl: change.meetingUrl ?? "", notes: change.notes ?? "", seriesId: null, occurrenceDate: null, isException: false,
       })
       continue
     }
     const event = next.find((e) => e.id === change.eventId)
     if (!event) continue
+    if (event.seriesId) event.isException = true
     if (change.action === "skip") {
       event.status = "skipped"
     } else if (change.action === "move") {

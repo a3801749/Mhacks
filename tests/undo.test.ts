@@ -3,6 +3,7 @@ import { beforeEach, test } from "node:test"
 import { memoryStore } from "../src/lib/store/memory"
 import { scheduleUndo } from "../src/lib/undo"
 import type { ScheduleChange } from "../src/lib/types"
+import { event } from "./fixtures"
 
 beforeEach(() => memoryStore.reset("2026-10-03"))
 
@@ -34,9 +35,9 @@ test("Undo cannot delete a newly created block after work has been recorded", as
 })
 
 test("Undo preserves the status implied by work logged after a move", () => {
-  const before = { id: "e", date: "2026-10-03", startMin: 600, endMin: 660, status: "planned" as const,
+  const before = event({ id: "e", date: "2026-10-03", startMin: 600, endMin: 660, status: "planned" as const,
     actualMinutes: 0, kind: "work" as const, taskId: null, projectId: null, title: "Focus",
-    movedFromDate: null, movedFromStartMin: null }
+    movedFromDate: null, movedFromStartMin: null })
   const result = scheduleUndo([before], [{ ...before, actualMinutes: 15, status: "partial" }],
     [{ action: "move", eventId: "e", reason: "Move" }], [])
   assert.equal(result.restore[0].patch.status, "partial")

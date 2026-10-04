@@ -4,6 +4,8 @@ import { toDateKey } from "../time"
 import type { WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
+import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
+import { addDays } from "../time"
 
 type Data = Omit<WeekData, "source">
 
@@ -25,14 +27,18 @@ function current(): Data {
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 export const memoryStore: Store = {
-  async getWeek(today) {
-    return snapshot(data(today))
+  async getWeek(today, through) {
+    const d = data(today)
+    d.series ??= []
+    d.events = materializeSeries(d.events, d.series, through ?? addDays(today, 366))
+    return snapshot(d)
   },
 
   async logTime(eventId, minutes, note) {
     const d = current()
     const event = d.events.find((e) => e.id === eventId)
     if (!event) throw new Error("Event not found")
+    if (event.kind !== "work") throw new RequestError("Focused time can only be logged on focus blocks")
     const before = event.actualMinutes
     event.actualMinutes = Math.max(0, before + minutes)
     event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
@@ -89,6 +95,32 @@ export const memoryStore: Store = {
     const event = d.events.find((e) => e.id === eventId)
     if (!event) throw new Error("Event not found")
     Object.assign(event, patch)
+    if (event.seriesId) {
+      if (patch.isException === undefined) event.isException = true
+      const series = d.series.find((s) => s.id === event.seriesId)
+      if (series) series.revision = (series.revision ?? 0) + 1
+    }
+    if (event.actualMinutes > 0 && (patch.status !== undefined || patch.startMin !== undefined || patch.endMin !== undefined) && event.status !== "skipped") event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
+    return snapshot(d)
+  },
+
+  async createSeries(input, today, replaceEventId) {
+    const d = current()
+    if (replaceEventId) d.events = d.events.filter((e) => e.id !== replaceEventId)
+    d.series.push({ ...input, id: uid("series"), stopBefore: null, excludedDates: [] })
+    d.events = materializeSeries(d.events, d.series, addDays(today, 366))
+    return snapshot(d)
+  },
+
+  async editSeries(eventId, input, scope, today) {
+    const d = current()
+    Object.assign(d, changeSeries(snapshot(d), eventId, input, scope, uid("series"), today))
+    return snapshot(d)
+  },
+
+  async removeEvents(eventId, scope) {
+    const d = current()
+    Object.assign(d, removeOccurrences(snapshot(d), eventId, scope))
     return snapshot(d)
   },
 

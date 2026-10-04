@@ -4,7 +4,9 @@ import path from "node:path"
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
 import { buildSeed } from "../seed"
 import { applyChanges } from "../schedule"
-import type { CalendarEvent, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
+import { changeSeries, materializeSeries, removeOccurrences } from "../recurrence"
+import { addDays } from "../time"
+import type { CalendarEvent, EventSeries, CheckIn, Project, Settings, Task, TimeLog, WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
 import { RequestError } from "../errors"
 
@@ -75,19 +77,25 @@ async function seed(sql: Sql, today: string) {
 
 function insertEvent(sql: Sql, e: CalendarEvent) {
   return sql`INSERT INTO events (id, user_id, project_id, task_id, title, date, start_min, end_min, status,
-                                 actual_minutes, kind, moved_from_date, moved_from_start_min)
+                                 actual_minutes, kind, moved_from_date, moved_from_start_min, location, meeting_url, notes, series_id, occurrence_date, is_exception)
              VALUES (${e.id}, ${USER_ID}, ${e.projectId}, ${e.taskId}, ${e.title}, ${e.date}, ${e.startMin},
                      ${e.endMin}, ${e.status}, ${e.actualMinutes}, ${e.kind}, ${e.movedFromDate},
-                     ${e.movedFromStartMin})
+                     ${e.movedFromStartMin}, ${e.location}, ${e.meetingUrl}, ${e.notes}, ${e.seriesId}, ${e.occurrenceDate}, ${e.isException})
              ON CONFLICT (id) DO UPDATE SET
                date = EXCLUDED.date, start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min,
-               status = EXCLUDED.status, moved_from_date = EXCLUDED.moved_from_date,
+               status = CASE WHEN events.actual_minutes > 0 AND EXCLUDED.status <> 'skipped'
+                 THEN CASE WHEN events.actual_minutes >= EXCLUDED.end_min - EXCLUDED.start_min THEN 'completed' ELSE 'partial' END
+                 ELSE EXCLUDED.status END,
+               title = EXCLUDED.title, project_id = EXCLUDED.project_id, task_id = EXCLUDED.task_id, kind = EXCLUDED.kind,
+               location = EXCLUDED.location, meeting_url = EXCLUDED.meeting_url, notes = EXCLUDED.notes,
+               series_id = EXCLUDED.series_id, occurrence_date = EXCLUDED.occurrence_date, is_exception = EXCLUDED.is_exception,
+               moved_from_date = EXCLUDED.moved_from_date,
                moved_from_start_min = EXCLUDED.moved_from_start_min`
 }
 
 async function load(): Promise<WeekData> {
   const { sql } = client()
-  const [users, projects, tasks, events, logs, checkIns] = await Promise.all([
+  const [users, projects, tasks, events, logs, checkIns, series] = await sql.transaction([
     sql`SELECT guidance_mode, check_in_enabled, ai_planner_enabled, today_insights_enabled, analytics_patterns_enabled, screen_time_enabled FROM users WHERE id = ${USER_ID}`,
     sql`SELECT id, name, color, course, type, priority, notes, pinned, pin_count, pin_order, target_minutes, progress_percent,
                to_char(assigned_date, 'YYYY-MM-DD') AS assigned_date, to_char(due_date, 'YYYY-MM-DD') AS due_date,
@@ -96,16 +104,18 @@ async function load(): Promise<WeekData> {
     sql`SELECT t.id, t.project_id, t.title, t.estimate_minutes, t.done
         FROM tasks t JOIN projects p ON p.id = t.project_id WHERE p.user_id = ${USER_ID} ORDER BY t.id`,
     sql`SELECT id, project_id, task_id, title, to_char(date, 'YYYY-MM-DD') AS date, start_min, end_min, status,
-               actual_minutes, kind, to_char(moved_from_date, 'YYYY-MM-DD') AS moved_from_date, moved_from_start_min
+               actual_minutes, kind, location, meeting_url, notes, series_id, is_exception, to_char(occurrence_date, 'YYYY-MM-DD') AS occurrence_date, to_char(moved_from_date, 'YYYY-MM-DD') AS moved_from_date, moved_from_start_min
         FROM events WHERE user_id = ${USER_ID} ORDER BY date, start_min`,
     sql`SELECT l.id, l.task_id, l.event_id, l.minutes, l.note, l.created_at
         FROM time_logs l JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
         WHERE p.user_id = ${USER_ID} ORDER BY l.created_at`,
     sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, rating, note FROM check_ins WHERE user_id = ${USER_ID} ORDER BY date`,
-  ])
+    sql`SELECT definition FROM event_series WHERE user_id = ${USER_ID}`,
+  ], { isolationLevel: "RepeatableRead", readOnly: true })
   const u = users[0]
   return {
     source: "neon",
+    series: series.map((r) => r.definition as EventSeries),
     settings: {
       guidanceMode: (u?.guidance_mode ?? "coach") as Settings["guidanceMode"],
       checkInEnabled: u?.check_in_enabled ?? true,
@@ -157,6 +167,7 @@ async function load(): Promise<WeekData> {
         kind: r.kind,
         movedFromDate: r.moved_from_date,
         movedFromStartMin: r.moved_from_start_min,
+        location: r.location, meetingUrl: r.meeting_url, notes: r.notes, seriesId: r.series_id, occurrenceDate: r.occurrence_date, isException: r.is_exception,
       }),
     ),
     logs: logs.map(
@@ -172,9 +183,57 @@ async function load(): Promise<WeekData> {
   }
 }
 
+async function saveSeriesState(before: WeekData, next: Pick<WeekData, "events" | "series">) {
+  const { sql } = client()
+  const previous = new Map(before.events.map((e) => [e.id, JSON.stringify(e)]))
+  const retained = new Set(next.events.map((e) => e.id))
+  const seriesIds = new Set(next.series.map((s) => s.id))
+  try {
+  await sql.transaction([
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
+    sql`SELECT 1 / CASE WHEN COALESCE((SELECT jsonb_object_agg(id, definition) FROM event_series WHERE user_id = ${USER_ID}), '{}'::jsonb)
+      = ${JSON.stringify(Object.fromEntries(before.series.map((s) => [s.id, s])))}::jsonb THEN 1 ELSE 0 END AS unchanged`,
+    ...before.events.filter((e) => !retained.has(e.id)).map((e) => sql`WITH locked AS (
+      SELECT * FROM events WHERE id = ${e.id} AND user_id = ${USER_ID} FOR UPDATE
+    ) SELECT 1 / CASE WHEN EXISTS (SELECT 1 FROM locked WHERE actual_minutes = 0 AND kind = ${e.kind}
+      AND status = ${e.status} AND date = ${e.date}::date AND start_min = ${e.startMin} AND end_min = ${e.endMin}
+      AND title = ${e.title} AND location = ${e.location} AND meeting_url = ${e.meetingUrl} AND notes = ${e.notes})
+      AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${e.id}) THEN 1 ELSE 0 END AS unchanged`),
+    ...next.series.filter((s) => JSON.stringify(s) !== JSON.stringify(before.series.find((p) => p.id === s.id))).map((s) => sql`INSERT INTO event_series (id, user_id, definition) VALUES (${s.id}, ${USER_ID}, ${JSON.stringify(s)}::jsonb)
+      ON CONFLICT (id) DO UPDATE SET definition = EXCLUDED.definition`),
+    ...before.events.filter((e) => !retained.has(e.id)).map((e) => sql`DELETE FROM events WHERE id = ${e.id} AND user_id = ${USER_ID}
+      AND actual_minutes = 0 AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${e.id})`),
+    ...next.events.filter((e) => previous.get(e.id) !== JSON.stringify(e)).map((e) => insertEvent(sql, e)),
+    ...before.series.filter((s) => !seriesIds.has(s.id)).map((s) => sql`DELETE FROM event_series WHERE id = ${s.id} AND user_id = ${USER_ID}`),
+  ])
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && err.code === "22012") throw new RequestError("Your calendar changed while saving. Refresh and try again.", 409)
+    throw err
+  }
+}
+
 export const neonStore: Store = {
-  async getWeek(today) {
+  async getWeek(today, through) {
     await ensureReady(today)
+    // The advisory lock serializes expansion with series/occurrence edits. A changed
+    // definition is skipped and retried, rather than generating stale occurrences.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const week = await load()
+      const next = materializeSeries(week.events, week.series, through ?? addDays(today, 366))
+      const existing = new Set(week.events.map((e) => e.id))
+      const added = next.filter((e) => !existing.has(e.id))
+      if (!added.length) return week
+      const { sql } = client()
+      await sql.transaction([
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
+        ...added.map((e) => sql`INSERT INTO events
+          (id, user_id, title, date, start_min, end_min, kind, location, meeting_url, notes, series_id, occurrence_date)
+          SELECT ${e.id}, ${USER_ID}, ${e.title}, ${e.date}::date, ${e.startMin}, ${e.endMin}, 'life', ${e.location}, ${e.meetingUrl}, ${e.notes}, ${e.seriesId}, ${e.occurrenceDate}::date
+          FROM event_series WHERE id = ${e.seriesId} AND user_id = ${USER_ID}
+            AND definition = ${JSON.stringify(week.series.find((s) => s.id === e.seriesId))}::jsonb
+          ON CONFLICT DO NOTHING`),
+      ])
+    }
     return load()
   },
 
@@ -184,7 +243,7 @@ export const neonStore: Store = {
     const rows = await sql`
       WITH event AS (
         SELECT id, task_id, actual_minutes, end_min - start_min AS length FROM events
-        WHERE id = ${eventId} AND user_id = ${USER_ID} FOR UPDATE
+        WHERE id = ${eventId} AND user_id = ${USER_ID} AND kind = 'work' FOR UPDATE
       ), totals AS (
         SELECT event.*, GREATEST(0, actual_minutes + ${minutes}) AS actual FROM event
       ), changed AS (
@@ -275,15 +334,57 @@ export const neonStore: Store = {
   async updateEvent(eventId, patch: EventPatch) {
     const { sql } = client()
     const has = (key: keyof EventPatch) => Object.prototype.hasOwnProperty.call(patch, key)
-    await sql`
-      UPDATE events SET
-        status = COALESCE(${patch.status ?? null}, status),
+    const result = await sql.transaction([
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
+      sql`UPDATE events SET
+        status = CASE WHEN COALESCE(${patch.status ?? null}, status) = 'skipped' THEN 'skipped'
+          WHEN actual_minutes > 0 AND (${patch.status != null} OR ${patch.startMin != null} OR ${patch.endMin != null})
+          THEN CASE WHEN actual_minutes >= COALESCE(${patch.endMin ?? null}::int, end_min) - COALESCE(${patch.startMin ?? null}::int, start_min) THEN 'completed' ELSE 'partial' END
+          ELSE COALESCE(${patch.status ?? null}, status) END,
+        title = COALESCE(${patch.title ?? null}, title),
+        kind = COALESCE(${patch.kind ?? null}, kind),
+        project_id = CASE WHEN ${has("projectId")} THEN ${patch.projectId ?? null} ELSE project_id END,
+        task_id = CASE WHEN ${has("taskId")} THEN ${patch.taskId ?? null} ELSE task_id END,
+        location = COALESCE(${patch.location ?? null}, location),
+        meeting_url = COALESCE(${patch.meetingUrl ?? null}, meeting_url),
+        notes = COALESCE(${patch.notes ?? null}, notes),
+        is_exception = CASE WHEN series_id IS NOT NULL THEN COALESCE(${patch.isException ?? null}::boolean, true) ELSE is_exception END,
         date = COALESCE(${patch.date ?? null}::date, date),
         start_min = COALESCE(${patch.startMin ?? null}::int, start_min),
         end_min = COALESCE(${patch.endMin ?? null}::int, end_min),
         moved_from_date = CASE WHEN ${has("movedFromDate")} THEN ${patch.movedFromDate ?? null}::date ELSE moved_from_date END,
         moved_from_start_min = CASE WHEN ${has("movedFromStartMin")} THEN ${patch.movedFromStartMin ?? null}::int ELSE moved_from_start_min END
-      WHERE id = ${eventId} AND user_id = ${USER_ID}`
+      WHERE id = ${eventId} AND user_id = ${USER_ID}
+        AND COALESCE(${patch.endMin ?? null}::int, end_min) > COALESCE(${patch.startMin ?? null}::int, start_min)
+        AND (NOT (${has("taskId")} AND task_id IS DISTINCT FROM ${patch.taskId ?? null}
+              OR ${has("projectId")} AND project_id IS DISTINCT FROM ${patch.projectId ?? null}
+              OR ${patch.kind !== undefined} AND kind IS DISTINCT FROM ${patch.kind ?? null})
+             OR actual_minutes = 0 AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${eventId}))
+        RETURNING id`,
+      sql`UPDATE event_series SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1))
+        WHERE id = (SELECT series_id FROM events WHERE id = ${eventId} AND user_id = ${USER_ID})`,
+    ])
+    if (!result[1].length) throw new RequestError("The block changed while saving. Refresh and try again.", 409)
+    return load()
+  },
+
+  async createSeries(input, today, replaceEventId) {
+    const before = await load()
+    const series: EventSeries = { ...input, id: `series-${randomUUID()}`, stopBefore: null, excludedDates: [] }
+    const next = { series: [...before.series, series], events: materializeSeries(before.events.filter((e) => e.id !== replaceEventId), [series], addDays(today, 366)) }
+    await saveSeriesState(before, next)
+    return load()
+  },
+
+  async editSeries(eventId, input, scope, today) {
+    const before = await load()
+    await saveSeriesState(before, changeSeries(before, eventId, input, scope, `series-${randomUUID()}`, today))
+    return load()
+  },
+
+  async removeEvents(eventId, scope) {
+    const before = await load()
+    await saveSeriesState(before, removeOccurrences(before, eventId, scope))
     return load()
   },
 
@@ -313,7 +414,12 @@ export const neonStore: Store = {
     const next = applyChanges(week.events, changes)
     const before = new Map(week.events.map((e) => [e.id, JSON.stringify(e)]))
     const dirty = next.filter((e) => before.get(e.id) !== JSON.stringify(e))
-    if (dirty.length > 0) await sql.transaction(dirty.map((e) => insertEvent(sql, e)))
+    if (dirty.length > 0) await sql.transaction([
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
+      ...[...new Set(dirty.map((e) => e.seriesId).filter((id) => id !== null))].map((id) => sql`UPDATE event_series
+        SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1)) WHERE id = ${id}`),
+      ...dirty.map((e) => insertEvent(sql, e)),
+    ])
     const changedIds = new Set(changes.map((c) => c.eventId))
     return { ...await load(), createdEventIds: next.filter((e) => !before.has(e.id)).map((e) => e.id),
       previousEvents: week.events.filter((e) => changedIds.has(e.id)) }

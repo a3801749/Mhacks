@@ -54,7 +54,44 @@ export interface CalendarEvent {
   kind: EventKind
   movedFromDate: string | null
   movedFromStartMin: number | null
+  location: string
+  meetingUrl: string
+  notes: string
+  seriesId: string | null
+  /** Original recurrence date, unchanged when an occurrence is moved. */
+  occurrenceDate: string | null
+  isException: boolean
 }
+
+export interface RecurrenceRule {
+  frequency: "daily" | "weekly" | "monthly" | "yearly"
+  interval: number
+  /** Sunday = 0; used by weekly rules. */
+  weekdays: number[]
+  monthlyMode: "date" | "weekday"
+  /** Used by monthly weekday rules; -1 means the last weekday. */
+  ordinal: number
+  end: { type: "never" } | { type: "until"; date: string } | { type: "count"; count: number }
+}
+
+/** Personal events repeat independently of assignments and time logs. */
+export interface EventSeries {
+  id: string
+  /** Internal optimistic version; also changes when one occurrence is edited. */
+  revision?: number
+  title: string
+  location: string
+  meetingUrl: string
+  notes: string
+  startDate: string
+  startMin: number
+  endMin: number
+  rule: RecurrenceRule
+  stopBefore: string | null
+  excludedDates: string[]
+}
+
+export type SeriesScope = "this" | "following" | "all"
 
 export interface TimeLog {
   id: string
@@ -85,6 +122,7 @@ export interface WeekData {
   projects: Project[]
   tasks: Task[]
   events: CalendarEvent[]
+  series: EventSeries[]
   logs: TimeLog[]
   checkIns: CheckIn[]
   settings: Settings
@@ -110,6 +148,9 @@ export interface ScheduleChange {
   projectId?: string | null
   /** Defaults to "work" when a task is attached, "life" otherwise. */
   kind?: EventKind
+  location?: string
+  meetingUrl?: string
+  notes?: string
   reason: string
 }
 

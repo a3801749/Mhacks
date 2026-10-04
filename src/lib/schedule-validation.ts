@@ -1,14 +1,12 @@
+import { eventDetails } from "./recurrence"
 import { applyChanges } from "./schedule"
-import { fromDateKey, toDateKey } from "./time"
+import { validDate } from "./time"
+export { validDate } from "./time"
 import type { ScheduleChange, WeekData } from "./types"
 
 export interface ScheduleNow {
   date: string
   minute: number
-}
-
-export function validDate(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && toDateKey(fromDateKey(value)) === value
 }
 
 function normalizeChange(value: unknown, data: WeekData): ScheduleChange {
@@ -33,7 +31,7 @@ function normalizeChange(value: unknown, data: WeekData): ScheduleChange {
     if (c.title !== undefined && typeof c.title !== "string") throw new Error("Invalid block title")
     return { action: "create", date: c.date, startMin: c.startMin, endMin: c.endMin,
       taskId: task?.id ?? null, projectId: task?.projectId ?? c.projectId ?? null, kind,
-      title: c.title?.trim().slice(0, 80) || "New block", reason }
+      title: c.title?.trim().slice(0, 80) || "New block", ...eventDetails(c), reason }
   }
 
   const event = data.events.find((e) => e.id === c.eventId)

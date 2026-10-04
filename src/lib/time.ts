@@ -16,6 +16,10 @@ export function addDays(key: string, days: number): string {
   return toDateKey(d)
 }
 
+export function validDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && toDateKey(fromDateKey(value)) === value
+}
+
 export function daysBetween(from: string, to: string): number {
   const ms = fromDateKey(to).getTime() - fromDateKey(from).getTime()
   return Math.round(ms / 86_400_000)

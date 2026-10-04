@@ -15,7 +15,8 @@ export function event(patch: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
     id: "e", title: "Work", projectId: "p", taskId: "t", date: today,
     startMin: 600, endMin: 660, actualMinutes: 0, status: "planned", kind: "work",
-    movedFromDate: null, movedFromStartMin: null, ...patch,
+    movedFromDate: null, movedFromStartMin: null,
+        location: "", meetingUrl: "", notes: "", seriesId: null, occurrenceDate: null, isException: false, ...patch,
   }
 }
 
@@ -23,7 +24,7 @@ export function week(patch: Partial<WeekData> = {}): WeekData {
   return {
     source: "memory", projects: [project()],
     tasks: [{ id: "t", projectId: "p", title: "Work", estimateMinutes: 180, done: false }],
-    events: [], logs: [], checkIns: [],
+    events: [], series: [], logs: [], checkIns: [],
     settings: { guidanceMode: "coach", checkInEnabled: true, aiPlannerEnabled: true, todayInsightsEnabled: true, analyticsPatternsEnabled: true, screenTimeEnabled: false },
     ...patch,
   }
