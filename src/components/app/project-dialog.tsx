@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ASSIGNMENT_TYPES, PRIORITIES } from "@/lib/brand"
-import { estimateProject } from "@/lib/analytics"
+import { displayedPercent, estimateProject } from "@/lib/analytics"
 import { addDays, formatDuration } from "@/lib/time"
 import type { AssignmentType, Priority, Project, WeekData } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -73,7 +73,8 @@ function ProjectForm({
   const [assigned, setAssigned] = useState(p?.assignedDate ?? today)
   const [due, setDue] = useState(p?.dueDate ?? addDays(today, 7))
   const [firstTask, setFirstTask] = useState("")
-  const [progress, setProgress] = useState(p?.progressPercent ?? 0)
+  const [initialProgress] = useState(() => (p ? displayedPercent(p, data) : 0))
+  const [progress, setProgress] = useState(initialProgress)
   const [saving, setSaving] = useState<"save" | "finish" | null>(null)
   const courses = [...new Set(data.projects.map((x) => x.course))].sort()
 
@@ -96,7 +97,7 @@ function ProjectForm({
       progressPercent: null,
       completedDate: null,
     } satisfies Project)
-  const progressChanged = !isNew && progress !== (p!.progressPercent ?? 0)
+  const progressChanged = !isNew && progress !== initialProgress
   const estimate = estimateProject(
     {
       ...preview,

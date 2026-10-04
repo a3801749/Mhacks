@@ -5,7 +5,7 @@ import { Check, CheckCircle2, Loader2, MessageCircleHeart, Moon, Pencil, RotateC
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { estimateProject, taskLogged } from "@/lib/analytics"
+import { displayedPercent, estimateProject, taskLogged } from "@/lib/analytics"
 import { Slider } from "@/components/ui/slider"
 import { SelectField } from "@/components/ui/select-field"
 import { AGENT_NAME } from "@/lib/brand"
@@ -144,7 +144,7 @@ function BlockBody({
 
         {canLog && <LogTime event={live} api={api} />}
 
-        {showProgress && !askProgress && <ProgressReport key={`${project.id}-${project.progressPercent}`} project={project} data={data} api={api} />}
+        {showProgress && !askProgress && <ProgressReport key={`${project.id}-${displayedPercent(project, data)}`} project={project} data={data} api={api} />}
 
         {logs.length > 0 && <ProgressTrail logs={logs} color={color} api={api} />}
 
@@ -431,9 +431,10 @@ export function ProgressReport({
   highlight?: boolean
   onSaved?: () => void
 }) {
-  const [value, setValue] = useState(project.progressPercent ?? 0)
+  const [initial] = useState(() => displayedPercent(project, data))
+  const [value, setValue] = useState(initial)
   const [saving, setSaving] = useState(false)
-  const dirty = value !== (project.progressPercent ?? 0)
+  const dirty = value !== initial || project.progressPercent == null
   const estimate = estimateProject({ ...project, progressPercent: value }, data)
 
   return (

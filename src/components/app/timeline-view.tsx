@@ -9,7 +9,7 @@ import { ASSIGNMENT_TYPES } from "@/lib/brand"
 import { addDays, daysBetween, formatDuration, fromDateKey, monthDay } from "@/lib/time"
 import type { Project } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { timelineTicks } from "@/lib/timeline-layout"
+import { progressFill, progressLag, timelineTicks } from "@/lib/timeline-layout"
 import { DueDateInput, DueEdge } from "./timeline-due"
 import { useApp } from "./app-shell"
 
@@ -18,11 +18,21 @@ interface Row {
   start: string
   end: string
   started: string | null
-  fillEnd: string | null
+  finished: string | null
   percent: number
   logged: number
   remaining: number | null
-  status: { label: string; tone: "good" | "warn" | "done" | "idle" }
+}
+
+type Status = { label: string; tone: "good" | "warn" | "done" | "idle" }
+
+function rowStatus(r: Row, due: string, today: string): Status {
+  if (r.finished) return { label: `Finished ${monthDay(r.finished)}`, tone: "done" }
+  if (r.percent >= 100) return { label: "Done", tone: "done" }
+  if (!r.started && r.percent === 0) return { label: "Not started", tone: "idle" }
+  const lag = progressLag(progressFill(r.start, due, r.started, r.percent), today)
+  if (lag <= 0) return { label: lag < -1 ? "Ahead" : "On pace", tone: "good" }
+  return { label: "Behind pace", tone: "warn" }
 }
 
 export function TimelineView() {
@@ -31,33 +41,16 @@ export function TimelineView() {
   const [preview, setPreview] = useState<{ id: string; date: string } | null>(null)
 
   const health = projectHealth(data, today)
-  const rows: Row[] = health.map((h) => {
-    const started = projectStartedDate(h.project.id, data)
-    const span = started ? Math.max(1, daysBetween(started, addDays(h.project.dueDate, 1))) : 0
-    const fillEnd = started ? addDays(started, Math.round((h.percent / 100) * span)) : null
-    let status: Row["status"]
-    if (!started) status = { label: "Not started", tone: "idle" }
-    else if (h.percent >= 100) status = { label: "Done", tone: "done" }
-    else {
-      const lag = daysBetween(fillEnd!, today)
-      status =
-        lag <= 0
-          ? { label: lag < -1 ? "Ahead" : "On pace", tone: "good" }
-          : { label: "Behind pace", tone: "warn" }
-    }
-    return {
-      project: h.project,
-      start: h.project.assignedDate,
-      end: h.project.dueDate,
-      started,
-      fillEnd,
-      percent: h.percent,
-      logged: h.logged,
-      remaining: h.remaining,
-      status,
-
-    }
-  })
+  const rows: Row[] = health.map((h) => ({
+    project: h.project,
+    start: h.project.assignedDate,
+    end: h.project.dueDate,
+    started: projectStartedDate(h.project.id, data),
+    finished: null,
+    percent: h.percent,
+    logged: h.logged,
+    remaining: h.remaining,
+  }))
   if (showFinished) {
     for (const p of data.projects.filter((x) => x.completedDate)) {
       rows.push({
@@ -65,11 +58,10 @@ export function TimelineView() {
         start: p.assignedDate,
         end: p.dueDate,
         started: projectStartedDate(p.id, data),
-        fillEnd: addDays(p.completedDate!, 1),
+        finished: p.completedDate,
         percent: 100,
         logged: projectLogged(p.id, data.tasks, data.logs, data.events),
         remaining: null,
-        status: { label: `Finished ${monthDay(p.completedDate!)}`, tone: "done" },
       })
     }
   }
@@ -132,6 +124,12 @@ export function TimelineView() {
           ) : (
             rows.map((r) => {
               const due = preview?.id === r.project.id ? preview.date : r.end
+              const status = rowStatus(r, due, today)
+              const fill = progressFill(r.start, due, r.started, r.percent)
+              if (r.finished) fill.length = Math.min(fill.span, Math.max(0.5, daysBetween(fill.origin, addDays(r.finished, 1))))
+              const fillLeft = x(fill.origin)
+              const fillWidth = x(fill.origin, fill.length) - fillLeft
+              const labelInside = fillWidth >= 4
               return (
               <div key={r.project.id} className="grid grid-cols-[220px_minmax(0,1fr)] border-b last:border-b-0">
                 <div>
@@ -146,13 +144,13 @@ export function TimelineView() {
                   <p
                     className={cn(
                       "mt-1 text-[11px] font-medium",
-                      r.status.tone === "good" && "text-emerald-700",
-                      r.status.tone === "warn" && "text-amber-700",
-                      r.status.tone === "done" && "text-muted-foreground",
-                      r.status.tone === "idle" && "text-sky-700",
+                      status.tone === "good" && "text-emerald-700",
+                      status.tone === "warn" && "text-amber-700",
+                      status.tone === "done" && "text-muted-foreground",
+                      status.tone === "idle" && "text-sky-700",
                     )}
                   >
-                    {r.status.label}
+                    {status.label}
                     {r.remaining != null && r.remaining > 0 && (
                       <span className="font-normal text-muted-foreground"> · ~{formatDuration(r.remaining)} left</span>
                     )}
@@ -163,7 +161,7 @@ export function TimelineView() {
                 <div className="relative min-h-24">
                   {gridDates.map((d) => <span key={d} className="absolute inset-y-0 w-px bg-border/70" style={{ left: `${x(d)}%` }} />)}
                   <div
-                    className={cn("absolute top-1/2 h-7 -translate-y-1/2 rounded-lg", r.status.tone === "done" && !r.remaining && "opacity-60")}
+                    className={cn("absolute top-1/2 h-7 -translate-y-1/2 rounded-lg", status.tone === "done" && !r.remaining && "opacity-60")}
                     style={{
                       left: `${x(r.start)}%`,
                       width: `${Math.max(0, Math.min(100, x(addDays(due, 1))) - x(r.start))}%`,
@@ -172,18 +170,22 @@ export function TimelineView() {
                     }}
                     title={`Assigned ${monthDay(r.start)} · due ${monthDay(r.end)}`}
                   />
-                  {r.started && r.fillEnd && (
+                  {fill.length > 0 && (
                     <div
                       className="absolute top-1/2 flex h-7 -translate-y-1/2 items-center justify-end overflow-hidden rounded-lg pr-2 text-[10px] font-medium text-white"
-                      style={{
-                        left: `${x(r.started)}%`,
-                        width: `${Math.max(1, x(r.fillEnd) - x(r.started))}%`,
-                        backgroundColor: r.project.color,
-                      }}
-                      title={`Started ${monthDay(r.started)} · ${r.percent}% done · ${formatDuration(r.logged)} logged`}
+                      style={{ left: `${fillLeft}%`, width: `${fillWidth}%`, backgroundColor: r.project.color }}
+                      title={`${r.started ? `Started ${monthDay(r.started)}` : "No time logged yet"} · ${r.percent}% done · ${formatDuration(r.logged)} logged`}
                     >
-                      <span className="truncate">{r.percent}%</span>
+                      {labelInside && <span className="truncate">{r.percent}%</span>}
                     </div>
+                  )}
+                  {!labelInside && (
+                    <span
+                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 pl-1.5 text-[10px] font-medium tabular-nums text-muted-foreground"
+                      style={{ left: `${fillLeft + fillWidth}%` }}
+                    >
+                      {r.percent}%
+                    </span>
                   )}
                   <DueEdge project={r.project} date={due} position={x(addDays(due, 1))} days={totalDays} onPreview={(date) => setPreview((current) => date ? { id: r.project.id, date } : current?.id === r.project.id ? null : current)} />
                   {preview?.id === r.project.id && <span className="absolute top-1 right-2 rounded bg-card px-2 text-xs text-muted-foreground">Due {monthDay(due)}</span>}

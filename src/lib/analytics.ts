@@ -141,6 +141,14 @@ export function estimateProject(project: Project, data: WeekData, stats = catego
   }
 }
 
+/** Reported progress, or the logged-vs-estimate share shown until the user reports one. */
+export function displayedPercent(project: Project, data: WeekData, estimate = estimateProject(project, data)) {
+  if (project.completedDate) return 100
+  if (project.progressPercent != null) return project.progressPercent
+  const logged = projectLogged(project.id, data.tasks, data.logs, data.events)
+  return Math.min(100, Math.round((logged / Math.max(1, estimate.total)) * 100))
+}
+
 export type Pace = "ahead" | "on-track" | "behind" | "done"
 
 export interface ProjectHealth {
@@ -162,8 +170,7 @@ export function projectHealth(data: WeekData, today: string): ProjectHealth[] {
     const remaining = estimate.remaining
     const scheduledAhead = projectScheduledAhead(project.id, data.events, today, project.dueDate)
     const daysLeft = Math.max(0, daysBetween(today, project.dueDate))
-    const percent =
-      project.progressPercent ?? Math.min(100, Math.round((logged / Math.max(1, estimate.total)) * 100))
+    const percent = displayedPercent(project, data, estimate)
     let pace: Pace = "on-track"
     if (!estimate.uncertain && (remaining === 0 || percent >= 100)) pace = "done"
     else if (!estimate.uncertain && scheduledAhead >= remaining) pace = "ahead"
