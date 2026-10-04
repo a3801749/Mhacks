@@ -9,7 +9,8 @@
     "start": "next start -p 4317",
     "lint": "eslint",
     "e2e": "node e2e/click-through.mjs",
-    "e2e:readiness": "node e2e/readiness.mjs"
+    "e2e:readiness": "node e2e/readiness.mjs",
+    "e2e:tilly": "node e2e/tilly.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
