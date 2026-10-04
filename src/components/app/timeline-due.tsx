@@ -7,18 +7,20 @@ import { addDays, daysBetween, monthDay } from "@/lib/time"
 import type { Project } from "@/lib/types"
 import { useApp } from "./app-shell"
 
-export function DueDateInput({ project }: { project: Project }) {
+export function DueDateInput({ project, previewDate = null }: { project: Project; previewDate?: string | null }) {
   const { api } = useApp()
   const [date, setDate] = useState(project.dueDate)
   const [saving, setSaving] = useState(false)
+  const shown = previewDate ?? date
   return <form className="flex items-center gap-1.5 px-4 pb-3" onSubmit={async (e) => {
     e.preventDefault()
+    if (previewDate) return
     setSaving(true)
     await api.updateProject(project.id, { dueDate: date }, "Due date updated")
     setSaving(false)
   }}>
-    <Input type="date" aria-label={`Due date for ${project.name}`} min={project.assignedDate} value={date} onChange={(e) => setDate(e.target.value)} required className="h-7 min-w-0 text-xs" />
-    {date !== project.dueDate && <Button type="submit" size="xs" disabled={saving}>Save</Button>}
+    <Input type="date" aria-label={`Due date for ${project.name}`} min={project.assignedDate} value={shown} onChange={(e) => { if (!previewDate) setDate(e.target.value) }} required className="h-7 min-w-0 text-xs" />
+    {shown !== project.dueDate && !previewDate && <Button type="submit" size="xs" disabled={saving}>Save</Button>}
   </form>
 }
 

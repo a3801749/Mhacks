@@ -33,10 +33,10 @@ export function PlannerView() {
 
   const beginEdit = (event: CalendarEvent, mode: "move" | "resize", e: React.PointerEvent) => {
     if (e.button !== 0) return
-    e.preventDefault()
+    // preventDefault on pointerdown cancels the click that opens the block.
     e.stopPropagation()
-    gridRef.current?.setPointerCapture(e.pointerId)
-    const rect = columns.current.get(event.date)!.getBoundingClientRect()
+    const rect = columns.current.get(event.date)?.getBoundingClientRect()
+    if (!rect) return
     const minute = START_HOUR * 60 + (e.clientY - rect.top) * 60 / HOUR_PX
     gesture.current = { event, mode, x: e.clientX, y: e.clientY, offset: minute - event.startMin, moved: false }
     previewRef.current = null
@@ -45,6 +45,7 @@ export function PlannerView() {
     const g = gesture.current
     if (!g) return
     if (!g.moved && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 5) return
+    if (!g.moved) gridRef.current?.setPointerCapture(e.pointerId)
     g.moved = true
     const closest = days.reduce((best, d) => {
       const rect = columns.current.get(d)!.getBoundingClientRect()

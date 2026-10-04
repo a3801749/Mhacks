@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { ArrowRight, Check, Lightbulb, Loader2, NotebookPen, RefreshCw, Sparkle, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -37,11 +37,11 @@ export function ReflectPanel({
   const insightsId = useId()
   const stats = backtrack(data, today)
   const key = insightKey(data, today)
+  const epoch = useInsightEpoch()
   const [result, setResult] = useState<InsightResult | null>(null)
-  const [version, setVersion] = useState(0)
   const [applying, setApplying] = useState(false)
-  const lastRefresh = useRef(0)
-  const current = result?.key === key && result.version === version ? result : null
+  const seenEpoch = useRef(epoch)
+  const current = result?.key === key && result.version === epoch ? result : null
   const reflection = current?.reflection
   const error = current?.error
   const loading = current === null
@@ -52,20 +52,20 @@ export function ReflectPanel({
   useEffect(() => {
     if (!data.settings.todayInsightsEnabled) return
     let active = true
-    const fresh = version !== lastRefresh.current
-    lastRefresh.current = version
+    const fresh = epoch !== seenEpoch.current
+    seenEpoch.current = epoch
     loadInsights(key, today, fresh).then(
       (reflection) => {
-        if (active) setResult({ key, version, reflection, applied: new Set() })
+        if (active) setResult({ key, version: epoch, reflection, applied: new Set() })
       },
       (err) => {
-        if (active) setResult({ key, version, error: err instanceof Error ? err.message : "Couldn't load insights", applied: new Set() })
+        if (active) setResult({ key, version: epoch, error: err instanceof Error ? err.message : "Couldn't load insights", applied: new Set() })
       },
     )
     return () => { active = false }
-  }, [key, today, version, data.settings.todayInsightsEnabled])
+  }, [key, today, epoch, data.settings.todayInsightsEnabled])
 
-  const refresh = () => setVersion((value) => value + 1)
+  const refresh = () => publishInsightRefresh()
 
   return (
     <section className={cn("space-y-4", className)} aria-labelledby={headingId}>
@@ -195,7 +195,7 @@ export function ReflectPanel({
                             setApplying(true)
                             try {
                               const ok = await api.applyChanges([s.change!], "Shift applied")
-                              if (ok) setResult((prev) => prev?.key === key && prev.version === version
+                              if (ok) setResult((prev) => prev?.key === key && prev.version === epoch
                                 ? { ...prev, applied: new Set(prev.applied).add(i) }
                                 : prev)
                             } finally {
@@ -246,9 +246,31 @@ export function ReflectPanel({
 
 const insightCache = createInsightCache()
 
+/** Every mounted panel (desktop column, sidebar, mobile tab) shares one refresh. */
+let insightEpoch = 0
+const insightListeners = new Set<() => void>()
+let freshFlight: { key: string; epoch: number; promise: Promise<Reflection> } | null = null
+
+function subscribeInsights(listener: () => void) {
+  insightListeners.add(listener)
+  return () => insightListeners.delete(listener)
+}
+
+function publishInsightRefresh() {
+  insightEpoch += 1
+  for (const listener of insightListeners) listener()
+}
+
+function useInsightEpoch() {
+  return useSyncExternalStore(subscribeInsights, () => insightEpoch, () => 0)
+}
+
 /** Shared across the panel's desktop and mobile instances so one page load is one request. */
 function loadInsights(key: string, today: string, fresh = false) {
-  return insightCache.load(key, () => request<Reflection>("/api/reflect", {
+  if (fresh && freshFlight?.key === key && freshFlight.epoch === insightEpoch) return freshFlight.promise
+  const promise = insightCache.load(key, () => request<Reflection>("/api/reflect", {
     method: "POST", body: JSON.stringify({ today, minute: nowMinutes(new Date()) }),
   }), fresh)
+  if (fresh) freshFlight = { key, epoch: insightEpoch, promise }
+  return promise
 }

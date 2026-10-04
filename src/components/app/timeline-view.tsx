@@ -156,7 +156,7 @@ export function TimelineView() {
                     )}
                   </p>
                 </button>
-                <DueDateInput key={`${r.project.id}-${r.project.dueDate}`} project={r.project} />
+                <DueDateInput key={`${r.project.id}-${r.project.dueDate}`} project={r.project} previewDate={preview?.id === r.project.id ? preview.date : null} />
                 </div>
                 <div className="relative min-h-24">
                   {gridDates.map((d) => <span key={d} className="absolute inset-y-0 w-px bg-border/70" style={{ left: `${x(d)}%` }} />)}
