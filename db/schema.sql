@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_user_date_idx ON events (user_id, date);
 
--- Append-only time series of focused time logged against a task.
+-- Editable time series of focused time logged against a task, including negative removals.
 CREATE TABLE IF NOT EXISTS time_logs (
   id         TEXT PRIMARY KEY,
   task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,

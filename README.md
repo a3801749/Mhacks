@@ -59,7 +59,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
   and returns `{ reply, changes[] }` via a JSON response schema. Changes are validated server-side
   (`src/lib/ai/engine.ts`) so hallucinated ids or edits to the past are dropped.
 - **Neon schema** is in `db/schema.sql` — `users`, `projects` (assignments with course, category, priority, notes, pin, progress), `tasks`,
-  `events` (planned start/end + `actual_minutes`), an append-only `time_logs` time series, and `check_ins`.
+  `events` (planned start/end + `actual_minutes`), an editable, signed `time_logs` time series, and `check_ins`.
 - **Demo data** (`src/lib/seed.ts`) includes a month of history: finished assignments that train the estimate model,
   a late-night drift on the thesis, and daily ratings that dip after late nights.
 - **Default voice** settings are in `src/lib/voice.ts`. Swap `ELEVENLABS_VOICE_ID` for a custom Voice Design voice when ready.
@@ -71,7 +71,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `/api/week?today=YYYY-MM-DD` | GET | Projects, tasks, events, logs, settings, integration status |
-| `/api/events/:id` | PATCH | Update status / time |
+| `/api/events/:id` | PATCH / DELETE | Update status / time, or remove an unworked block for Undo |
 | `/api/events/:id/log` | POST | Log `{ minutes, note }` on a block; negative minutes take time off |
 | `/api/logs/:id` | PATCH / DELETE | Edit or remove a progress-trail entry |
 | `/api/projects/pin-order` | PUT | Save pinned order `{ ids }` |

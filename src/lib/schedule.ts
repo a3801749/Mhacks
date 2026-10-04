@@ -69,7 +69,7 @@ export function findOpenSlot(
       .sort((a, b) => a.startMin - b.startMin)
     let cursor = Math.max(DAY_START, date === earliest.date ? roundUp(earliest.minute) : DAY_START)
     for (const block of busy) {
-      if (block.startMin - cursor >= length) return { date, startMin: cursor }
+      if (Math.min(block.startMin, DAY_END) - cursor >= length) return { date, startMin: cursor }
       cursor = Math.max(cursor, block.endMin + 15)
     }
     if (DAY_END - cursor >= length) return { date, startMin: cursor }

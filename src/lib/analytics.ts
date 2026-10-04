@@ -36,9 +36,9 @@ export function projectStartedDate(projectId: string, data: WeekData): string | 
   return dates[0] ?? null
 }
 
-export function projectScheduledAhead(projectId: string, events: CalendarEvent[], today: string) {
+export function projectScheduledAhead(projectId: string, events: CalendarEvent[], today: string, dueDate: string) {
   return events
-    .filter((e) => e.projectId === projectId && e.status === "planned" && e.date >= today)
+    .filter((e) => e.projectId === projectId && e.kind === "work" && e.status === "planned" && e.date >= today && e.date <= dueDate)
     .reduce((sum, e) => sum + (e.endMin - e.startMin), 0)
 }
 
@@ -156,14 +156,14 @@ export function projectHealth(data: WeekData, today: string): ProjectHealth[] {
     const logged = projectLogged(project.id, data.tasks, data.logs)
     const estimate = estimateProject(project, data, stats)
     const remaining = estimate.remaining
-    const scheduledAhead = projectScheduledAhead(project.id, data.events, today)
+    const scheduledAhead = projectScheduledAhead(project.id, data.events, today, project.dueDate)
     const daysLeft = Math.max(0, daysBetween(today, project.dueDate))
     const percent =
       project.progressPercent ?? Math.min(100, Math.round((logged / Math.max(1, estimate.total)) * 100))
     let pace: Pace = "on-track"
-    if (remaining === 0 || percent >= 100) pace = "done"
-    else if (scheduledAhead >= remaining) pace = "ahead"
-    else if (daysLeft <= 4 && scheduledAhead < remaining * 0.6) pace = "behind"
+    if (!estimate.uncertain && (remaining === 0 || percent >= 100)) pace = "done"
+    else if (!estimate.uncertain && scheduledAhead >= remaining) pace = "ahead"
+    else if (daysLeft <= 4 && (estimate.uncertain || scheduledAhead < remaining * 0.6)) pace = "behind"
     return { project, logged, remaining, estimate, scheduledAhead, daysLeft, percent, pace }
   })
 }
@@ -499,6 +499,7 @@ export function rhythmInsights(data: WeekData, today: string, days: number): Rhy
 
 /** Links the optional 1–10 daily check-in to how the day (and night before) went. */
 export function moodCorrelation(data: WeekData, from: string, to: string): RhythmInsight | null {
+  if (!data.settings.checkInEnabled) return null
   const checks = data.checkIns.filter((c) => c.date >= from && c.date <= to)
   if (checks.length < 5) return null
   const lateBefore = (date: string) =>

@@ -3,6 +3,7 @@ import { applyChanges, statusForActual } from "../schedule"
 import { toDateKey } from "../time"
 import type { WeekData } from "../types"
 import { PROJECT_COLORS, type EventPatch, type Store } from "./types"
+import { RequestError } from "../errors"
 
 type Data = Omit<WeekData, "source">
 
@@ -46,16 +47,17 @@ export const memoryStore: Store = {
     const d = current()
     const log = d.logs.find((l) => l.id === logId)
     if (!log) throw new Error("Log entry not found")
-    if (patch.note != null) log.note = patch.note
     if (patch.minutes != null) {
       const event = d.events.find((e) => e.id === log.eventId)
       if (event) {
         const before = event.actualMinutes
+        if (before + patch.minutes - log.minutes < 0) throw new RequestError("This edit would make the block's logged time negative. Adjust its removal entries first.", 409)
         event.actualMinutes = Math.max(0, before + patch.minutes - log.minutes)
         event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
       }
       log.minutes = patch.minutes
     }
+    if (patch.note != null) log.note = patch.note
     return snapshot(d)
   },
 
@@ -65,6 +67,7 @@ export const memoryStore: Store = {
     if (!log) throw new Error("Log entry not found")
     const event = d.events.find((e) => e.id === log.eventId)
     if (event) {
+      if (event.actualMinutes - log.minutes < 0) throw new RequestError("Deleting this entry would make the block's logged time negative. Adjust its removal entries first.", 409)
       event.actualMinutes = Math.max(0, event.actualMinutes - log.minutes)
       event.status = statusForActual(event.actualMinutes, event.endMin - event.startMin)
     }
@@ -94,6 +97,17 @@ export const memoryStore: Store = {
     const task = d.tasks.find((t) => t.id === taskId)
     if (!task) throw new Error("Task not found")
     task.done = done
+    return snapshot(d)
+  },
+
+  async deleteEvent(eventId) {
+    const d = current()
+    const event = d.events.find((e) => e.id === eventId)
+    if (!event) return snapshot(d)
+    if (event.actualMinutes > 0 || event.status === "completed" || d.logs.some((l) => l.eventId === eventId)) {
+      throw new RequestError("This block has recorded work and cannot be removed by Undo.", 409)
+    }
+    d.events = d.events.filter((e) => e.id !== eventId)
     return snapshot(d)
   },
 
@@ -141,8 +155,11 @@ export const memoryStore: Store = {
 
   async applyChanges(changes) {
     const d = current()
+    const ids = new Set(d.events.map((e) => e.id))
+    const changedIds = new Set(changes.map((c) => c.eventId))
+    const previousEvents = d.events.filter((e) => changedIds.has(e.id)).map((e) => ({ ...e }))
     d.events = applyChanges(d.events, changes)
-    return snapshot(d)
+    return { ...snapshot(d), createdEventIds: d.events.filter((e) => !ids.has(e.id)).map((e) => e.id), previousEvents }
   },
 
   async updateSettings(settings) {

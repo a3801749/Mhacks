@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { formatDuration, nowMinutes, toDateKey } from "@/lib/time"
-import type { NewProject, ProjectPatch } from "@/lib/store/types"
-import type { CalendarEvent, Integrations, ScheduleChange, Settings, WeekData } from "@/lib/types"
+import type { EventPatch, NewProject, ProjectPatch } from "@/lib/store/types"
+import type { AppliedWeek, Integrations, ScheduleChange, Settings, WeekData } from "@/lib/types"
 
 export type LoadedWeek = WeekData & { integrations?: Integrations }
 
@@ -54,7 +54,7 @@ export function useWeek(today: string | null) {
     load()
   }, [load])
 
-  const mutate = useCallback(async (fn: () => Promise<WeekData>, success?: string) => {
+  const mutate = useCallback(async <T extends WeekData,>(fn: () => Promise<T>, success?: string) => {
     try {
       const next = await fn()
       setData((prev) => ({ ...next, integrations: prev?.integrations }))
@@ -94,15 +94,17 @@ export function useWeek(today: string | null) {
       )
       return mutate(() => request(`/api/projects/pin-order`, { method: "PUT", body: json({ ids }) }))
     },
-    updateEvent: (eventId: string, patch: Partial<Pick<CalendarEvent, "status" | "date" | "startMin" | "endMin">>, msg?: string) =>
+    updateEvent: (eventId: string, patch: EventPatch, msg?: string) =>
       mutate(() => request(`/api/events/${eventId}`, { method: "PATCH", body: json(patch) }), msg),
+    deleteEvent: (eventId: string) =>
+      mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "DELETE" })),
     setTaskDone: (taskId: string, done: boolean) =>
       mutate(
         () => request(`/api/tasks/${taskId}`, { method: "PATCH", body: json({ done }) }),
         done ? "Task done. Take a breath." : "Task reopened",
       ),
     applyChanges: (changes: ScheduleChange[], msg = "Schedule updated") =>
-      mutate(() => request(`/api/schedule/apply`, { method: "POST", body: json({ changes }) }), msg),
+      mutate(() => request<AppliedWeek>(`/api/schedule/apply`, { method: "POST", body: json({ changes, today }) }), msg),
     updateSettings: (patch: Partial<Settings>) =>
       mutate(() => request(`/api/settings`, { method: "PUT", body: json(patch) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>

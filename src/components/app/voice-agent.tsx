@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AGENT_NAME, GUIDANCE_MODES } from "@/lib/brand"
 import { describeChange } from "@/lib/describe"
-import type { AdjustResponse, CalendarEvent, ChatTurn, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+import type { AdjustResponse, AppliedWeek, CalendarEvent, ChatTurn, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+import { scheduleUndo } from "@/lib/undo"
 import { cn } from "@/lib/utils"
 import { request, type WeekApi } from "@/hooks/use-week"
 
@@ -17,6 +18,7 @@ interface AgentTurn extends ChatTurn {
   changes?: ScheduleChange[]
   state?: "pending" | "applied" | "declined" | "undone"
   before?: CalendarEvent[]
+  createdEventIds?: string[]
   source?: AdjustResponse["source"]
 }
 
@@ -71,6 +73,7 @@ export function VoiceAgent({
   const [interim, setInterim] = useState("")
   const [muted, setMuted] = useState(false)
   const [speaking, setSpeaking] = useState(false)
+  const [applyingTurn, setApplyingTurn] = useState<number | null>(null)
   const recognitionRef = useRef<Recognition | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -135,15 +138,14 @@ export function VoiceAgent({
   const send = useCallback(
     async (raw: string) => {
       const message = raw.trim()
-      if (!message || thinking) return
+      if (!message || thinking || applyingTurn !== null) return
       setInput("")
       setInterim("")
       const history: ChatTurn[] = turns.map(({ role, text }) => ({ role, text }))
       setTurns((t) => [...t, { id: idRef.current++, role: "user", text: message }])
       setThinking(true)
-      const before = data.events
       try {
-        const res = await request<AdjustResponse & { autoApplied: boolean; week: WeekData | null }>(
+        const res = await request<AdjustResponse & { autoApplied: boolean; week: AppliedWeek | null }>(
           "/api/schedule/adjust",
           { method: "POST", body: JSON.stringify({ message, history, now }) },
         )
@@ -156,7 +158,8 @@ export function VoiceAgent({
             text: res.reply,
             changes: res.changes,
             state: res.changes.length ? (res.autoApplied ? "applied" : "pending") : undefined,
-            before,
+            before: res.week?.previousEvents,
+            createdEventIds: res.week?.createdEventIds,
             source: res.source,
           },
         ])
@@ -175,7 +178,7 @@ export function VoiceAgent({
         setThinking(false)
       }
     },
-    [api, data.events, now, speak, thinking, turns],
+    [api, now, speak, thinking, turns, applyingTurn],
   )
 
   useEffect(() => {
@@ -227,27 +230,34 @@ export function VoiceAgent({
     setTurns((t) => t.map((x) => (x.id === id ? { ...x, state } : x)))
 
   const accept = async (turn: AgentTurn) => {
-    if (!turn.changes) return
-    const ok = await api.applyChanges(turn.changes, "Done — your calendar shifted")
-    if (ok) setTurnState(turn.id, "applied")
+    if (!turn.changes || thinking || applyingTurn !== null) return
+    setApplyingTurn(turn.id)
+    try {
+      const ok = await api.applyChanges(turn.changes, "Done — your calendar shifted")
+      if (ok) setTurns((turns) => turns.map((t) => t.id === turn.id ? {
+        ...t, state: "applied", before: ok.previousEvents, createdEventIds: ok.createdEventIds,
+      } : t))
+    } finally {
+      setApplyingTurn(null)
+    }
   }
 
   const undo = async (turn: AgentTurn) => {
-    if (!turn.changes || !turn.before) return
-    for (const change of turn.changes) {
-      if (change.action === "create") continue
-      const prev = turn.before.find((e) => e.id === change.eventId)
-      if (prev) {
-        await api.updateEvent(prev.id, {
-          status: prev.status,
-          date: prev.date,
-          startMin: prev.startMin,
-          endMin: prev.endMin,
-        })
+    if (!turn.changes || !turn.before || thinking || applyingTurn !== null) return
+    setApplyingTurn(turn.id)
+    try {
+      const undo = scheduleUndo(turn.before, data.events, turn.changes, turn.createdEventIds ?? [])
+      for (const id of undo.remove) {
+        if (!await api.deleteEvent(id)) return
       }
+      for (const restore of undo.restore) {
+        if (!await api.updateEvent(restore.id, restore.patch)) return
+      }
+      toast.success("Put back the way it was")
+      setTurnState(turn.id, "undone")
+    } finally {
+      setApplyingTurn(null)
     }
-    toast.success("Put back the way it was")
-    setTurnState(turn.id, "undone")
   }
 
   const mode = GUIDANCE_MODES[data.settings.guidanceMode]
@@ -339,7 +349,7 @@ export function VoiceAgent({
                     <div className="flex gap-2 pt-1">
                       {turn.state === "pending" && (
                         <>
-                          <Button size="xs" onClick={() => accept(turn)}>
+                          <Button size="xs" disabled={thinking || applyingTurn !== null} onClick={() => accept(turn)}>
                             <Check /> Sounds good
                           </Button>
                           <Button size="xs" variant="ghost" onClick={() => setTurnState(turn.id, "declined")}>
@@ -352,7 +362,7 @@ export function VoiceAgent({
                           <span className="flex items-center gap-1 text-xs text-emerald-700">
                             <Check className="size-3" /> Applied
                           </span>
-                          <Button size="xs" variant="ghost" onClick={() => undo(turn)}>
+                          <Button size="xs" variant="ghost" disabled={thinking || applyingTurn !== null} onClick={() => undo(turn)}>
                             <Undo2 /> Undo
                           </Button>
                         </>

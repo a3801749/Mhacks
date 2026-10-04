@@ -9,7 +9,7 @@ Code: `src/components/app/onboarding-view.tsx`.
 2. Let people choose how much AI they want **before** it starts doing things.
 3. Make every extra (check-ins, AI planner, screen time) clearly optional.
 4. Get one real assignment in, so the estimate model shows its value right away.
-5. End with a map of the four views, so nothing feels hidden.
+5. End with a map of the five views, so nothing feels hidden.
 
 Target time: under a minute. Every step can be skipped.
 
@@ -21,14 +21,15 @@ Target time: under a minute. Every step can be skipped.
 | 1 | **Guidance** | Picks Anchor / Lighthouse / Tide, each with an example of what Tilly would say | `settings.guidanceMode` |
 | 2 | **Extras** | Toggles the daily check-in and the AI planner. Sees a live preview of each. Screen time is shown as "coming soon" with sample data | `settings.checkInEnabled`, `settings.aiPlannerEnabled` |
 | 3 | **First assignment** | Adds one assignment with course + type + guess + due date, or skips to the demo data | New project + first task |
-| 4 | **Tour** | Four cards (Today, Plan, Rhythm, Timeline) with what each is and how to use it, plus a Tilly card. Each card opens that page | `localStorage["andy:onboarded"]` |
+| 4 | **Tour** | Five cards (Today, Agenda, Plan, Rhythm, Timeline) with what each is and how to use it, plus a Tilly card. Each card opens that page | `localStorage["andy:onboarded"]` |
 
 ### Design notes
 
 - **Previews over descriptions.** Each extra shows what it looks like (the 1–10 row, a sample planner breakdown,
   the screen-time chart) so people decide based on the actual feature.
 - **Guidance is chosen up front** because it determines whether the AI ever changes the calendar on its own. People
-  should never be surprised by that.
+  should never be surprised by that. Guidance and Extras advance only after their settings save successfully; a failed
+  save keeps the selection on screen for retry.
 - **No per-session ratings.** The team agreed rating every study session is too much. The single daily rating is the
   low-effort version, and it's still enough for the "late nights → rough days" insight.
 - **The first assignment teaches tagging.** The copy explains *why* course and type matter ("EECS projects take you

@@ -1,0 +1,88 @@
+import { applyChanges } from "./schedule"
+import { fromDateKey, toDateKey } from "./time"
+import type { ScheduleChange, WeekData } from "./types"
+
+export interface ScheduleNow {
+  date: string
+  minute: number
+}
+
+export function validDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && toDateKey(fromDateKey(value)) === value
+}
+
+function normalizeChange(value: unknown, data: WeekData): ScheduleChange {
+  if (!value || typeof value !== "object") throw new Error("Invalid schedule change")
+  const c = value as ScheduleChange
+  if (!["create", "move", "shorten", "skip"].includes(c.action)) throw new Error("Unknown schedule action")
+  if (typeof c.reason !== "string") throw new Error("A schedule change needs a reason")
+  if (c.date !== undefined && !validDate(c.date)) throw new Error("Invalid block date")
+  for (const minute of [c.startMin, c.endMin]) {
+    if (minute !== undefined && (!Number.isInteger(minute) || minute < 0 || minute > 1440)) throw new Error("Invalid block time")
+  }
+
+  const reason = c.reason.slice(0, 280)
+  if (c.action === "create") {
+    if (!validDate(c.date) || c.startMin == null || c.endMin == null || c.endMin <= c.startMin) throw new Error("Invalid block interval")
+    const task = c.taskId == null ? null : data.tasks.find((t) => t.id === c.taskId)
+    if (c.taskId != null && (!task || task.done)) throw new Error("Pick an open task")
+    if (c.projectId != null && !data.projects.some((p) => p.id === c.projectId)) throw new Error("Unknown assignment")
+    if (task && c.projectId != null && task.projectId !== c.projectId) throw new Error("Task does not belong to that assignment")
+    const kind = c.kind ?? (task ? "work" : "life")
+    if (!["work", "life"].includes(kind) || (task && kind !== "work")) throw new Error("Invalid block kind")
+    if (c.title !== undefined && typeof c.title !== "string") throw new Error("Invalid block title")
+    return { action: "create", date: c.date, startMin: c.startMin, endMin: c.endMin,
+      taskId: task?.id ?? null, projectId: task?.projectId ?? c.projectId ?? null, kind,
+      title: c.title?.trim().slice(0, 80) || "New block", reason }
+  }
+
+  const event = data.events.find((e) => e.id === c.eventId)
+  if (!event) throw new Error("Block not found")
+  if (event.status !== "planned") throw new Error("That block is no longer planned. Refresh and try again.")
+  if (c.action === "skip") return { action: "skip", eventId: event.id, reason }
+  const date = c.date ?? event.date
+  if (c.action === "shorten" && date !== event.date) throw new Error("Shorten the block on its existing date")
+  const startMin = c.startMin ?? event.startMin
+  const endMin = c.endMin ?? (c.action === "move" ? startMin + event.endMin - event.startMin : event.endMin)
+  if (endMin <= startMin || endMin > 1440) throw new Error("Invalid block interval")
+  if (c.action === "shorten" && (startMin < event.startMin || endMin > event.endMin)) throw new Error("Shortening cannot extend a block")
+  return { action: c.action, eventId: event.id, date, startMin, endMin, reason }
+}
+
+/** Manual scheduling allows overlaps; all changes must still name valid blocks and intervals. */
+export function validateScheduleChanges(changes: unknown, data: WeekData): ScheduleChange[] {
+  if (!Array.isArray(changes) || changes.length > 100) throw new Error("changes must be an array of at most 100 items")
+  let events = data.events
+  return changes.map((value) => {
+    const change = normalizeChange(value, { ...data, events })
+    events = applyChanges(events, [change])
+    return change
+  })
+}
+
+/** Model proposals additionally protect past work, waking hours, and occupied slots. */
+export function sanitizeScheduleChanges(changes: unknown, data: WeekData, now: ScheduleNow): ScheduleChange[] {
+  if (!Array.isArray(changes)) return []
+  let events = data.events
+  const out: ScheduleChange[] = []
+  for (const value of changes.slice(0, 100)) {
+    try {
+      const change = normalizeChange(value, { ...data, events })
+      const original = events.find((e) => e.id === change.eventId)
+      if (original && (original.date < now.date || (original.date === now.date && original.endMin <= now.minute))) continue
+      if (change.action !== "skip") {
+        const { date, startMin, endMin } = change as ScheduleChange & { date: string; startMin: number; endMin: number }
+        if (date < now.date || startMin < 480 || endMin > 1320) continue
+        const continuing = change.action === "shorten" && startMin === original?.startMin && endMin > now.minute
+        if (date === now.date && startMin < now.minute && !continuing) continue
+        if (change.action === "move" && date === original?.date && startMin === original.startMin && endMin === original.endMin) continue
+        if (events.some((e) => e.id !== change.eventId && e.status !== "skipped" && e.date === date && e.startMin < endMin && e.endMin > startMin)) continue
+      }
+      events = applyChanges(events, [change])
+      out.push(change)
+    } catch {
+      // Invalid model output is discarded, rather than reaching persistence.
+    }
+  }
+  return out
+}

@@ -46,7 +46,7 @@ Priority (`Project.priority`) is how the work is graded, not a 1–5 rank:
 | `/plan` | Plan | `planner-view.tsx` | Week grid. Drag a block (tap on touch) and Tilly suggests a breakdown. |
 | `/rhythm` | Rhythm | `rhythm-view.tsx` | Midnight-to-midnight histogram of logged work, week or month, grouped by assignment, course, or category. |
 | `/timeline` | Timeline | `timeline-view.tsx` | Gantt from assigned date to due date. Fill starts the day work actually began. |
-| `/welcome` | (linked, not in nav) | `onboarding-view.tsx` | Five steps: Welcome, Guidance, Extras, First assignment, Tour. |
+| `/welcome` | (linked, not in nav) | `onboarding-view.tsx` | Five steps: Welcome, Guidance, Extras, First assignment, Tour of all five views. Settings saves must succeed before advancing. |
 
 Shell, nav, "New assignment" button, Tilly button, and the dialogs live in `src/components/app/app-shell.tsx`. Pages under `src/app/(app)/` only render a view; the `(app)` layout wraps them in `AppShell`.
 
@@ -77,14 +77,14 @@ Creating an assignment is the **New assignment** button in the header (top right
 
 - Log time with the quick buttons or a custom amount: `2.75` (hours), `1:30`, `1h 30m`, or minutes, with Add or Remove. `parseDuration` does the parsing. One entry is capped at `MAX_LOG_MINUTES` (12 hours, in `time.ts`) on the client and in the API. Removing more than the block's logged time is blocked; the store also clamps `actual_minutes` at 0. Status follows `statusForActual` (`schedule.ts`): 0 → `planned`, under length → `partial`, otherwise `completed`.
 - Removals are stored as negative `time_logs` rows, so totals stay a plain sum.
-- The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference.
+- The progress trail lists every entry in a scrolling box. Each entry can be edited (minutes, note) or deleted via `PATCH` / `DELETE /api/logs/:id`; the linked event's actual time moves by the difference. Edits and deletions that would make the total negative are rejected: adjust later removal entries first. Neon updates the block and its ledger atomically.
 - Marking a task done shows a highlighted "how far along is the assignment now?" slider when the block belongs to an unfinished assignment.
 - Blocks do not need an assignment. A work block with no task can still log time (no `time_logs` row, since logs need a task) and has a "Mark done" button.
 - `estimateProject` returns `uncertain: true` when progress is 0% but at least 2 hours are logged. The UI shows the "can't give an accurate estimate yet" sentence instead of a number.
 
 ## Looking back
 
-`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount (`loadInsights`, cached per `today` so the desktop and mobile copies share one request) and has a Refresh button. There is no "Compile my week" button anymore.
+`reflect-panel.tsx`. Planned vs actual chart and time-of-day follow-through stay. The old stat tiles (Did, Follow-through, Blocks landed) are gone on purpose. **Insights** loads the reflection automatically on mount and after calendar, progress, or settings changes. `insights.ts` caches by date and calendar snapshot so desktop and mobile copies share one request. Superseded responses are ignored. Refresh requests a fresh reflection; the client sends its local minute so expired same-day shifts are excluded. There is no "Compile my week" button anymore.
 
 ## Assignment dialog
 
@@ -109,7 +109,7 @@ A newly pinned assignment goes to the end of the pinned list (`pin_order` = max 
 
 `events`: `date` is `YYYY-MM-DD`, `start_min` / `end_min` are minutes from local midnight. This is timezone-agnostic on purpose. `actual_minutes` is what was logged. `kind` is `work` or `life`. `moved_from_*` records the first time a block was moved.
 
-`time_logs` is append-only. `check_ins` is one row per user per date, rating 1–10.
+`time_logs` stores signed entries that can be edited or deleted. Their sum must stay consistent with the linked block's actual time. `check_ins` is one row per user per date, rating 1–10.
 
 Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements plus the category migration at the bottom of `schema.sql` (`studying` → `exam`, `writing` → `project`, drop the old `projects_type_check`).
 
@@ -117,9 +117,10 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 - The client sends `today` and `now`. Do not compute "today" on the server from UTC if a user-facing day is involved.
 - `windowDates(today)` is today−3 through today+3 (`WINDOW_BACK`, `WINDOW_AHEAD`), so today is centered. The Today strip and backtracking stats use this window.
-- `projectHealth` pace: `done` when remaining is 0 or percent ≥ 100; `ahead` when upcoming planned minutes cover the estimate; `behind` when ≤4 days remain and less than 60% of the remainder is booked; otherwise `on-track`.
+- `projectHealth` pace: `done` when a reliable estimate has no remaining work or percent ≥ 100; `ahead` when planned **work** minutes from today through the due date cover the estimate; `behind` when ≤4 days remain and less than 60% of the remainder is booked; otherwise `on-track`. An uncertain estimate cannot imply Done or Ahead, and is Behind near its deadline.
 - `estimateProject`: if the user has reported progress and logged time, blend a pace estimate with the category estimate. The blend trusts pace more as progress passes 50% (`weight = min(1, progress/50)`). Otherwise use the course+type multiplier from finished assignments, then type-only, then the user's original target. Finished assignments are the training set (`completedDate` set).
 - Rhythm wind-down (`rhythmInsights`) ignores today's night. A partial day reads as "wrapping up early" and is a known bug if you include it. Sessions before 4:00 count toward the previous night (`windDownByDay`).
+- Disabling check-ins excludes saved ratings from both `recentMood` and `moodCorrelation`, including the local planner and Gemini's rhythm context. It does not delete the saved entries.
 
 ## Pins and the planner
 
@@ -133,7 +134,9 @@ Schema upgrades for old databases are the `ALTER TABLE ... ADD COLUMN IF NOT EXI
 
 `src/lib/ai/engine.ts` calls Gemini (`gemini-2.5-flash`, JSON schema) when `GEMINI_API_KEY` is set, and `fallback.ts` / `mockBreakdown` otherwise. Failures fall back; they do not 500 the request.
 
-`sanitize` drops changes that edit the past, use unknown ids, have out-of-range times, or move a block onto its current slot. Do not apply model output without it.
+`sanitizeScheduleChanges` in `schedule-validation.ts` checks real assignment/task ids, positive intervals, local dates, past destinations, waking hours (8am–10pm), and overlaps, including within a batch. Both Gemini and local proposals go through it. The apply API validates references and intervals again and rejects stale proposals targeting a block that is no longer planned. Manual scheduling still permits overlaps and unassigned focus blocks.
+
+Schedule application returns `createdEventIds` and `previousEvents` for that operation. Tilly uses them for Undo: newly added blocks are deleted and existing blocks restore their times, status, and original move history. A new block with logged work cannot be deleted. Failures leave the turn available for retry instead of falsely marking it undone.
 
 Guidance prompt text is `MODE_RULES` in `prompts.ts`. Lighthouse is still the `coach` key there.
 
@@ -148,7 +151,7 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | Route | Method | Body / behavior |
 | --- | --- | --- |
 | `/api/week?today=` | GET | Full `WeekData` plus integration flags |
-| `/api/events/:id` | PATCH | status, date, startMin, endMin |
+| `/api/events/:id` | PATCH / DELETE | Update status, date, startMin, endMin, or move history; delete an unworked block for Undo |
 | `/api/events/:id/log` | POST | `{ minutes, note }` — ±1 to 720; negative takes time off. Updates `actual_minutes` and appends a time log |
 | `/api/logs/:id` | PATCH / DELETE | Edit `{ minutes, note }` or remove a trail entry; the event's actual time follows |
 | `/api/projects/pin-order` | PUT | `{ ids }` in display order |
@@ -159,7 +162,7 @@ Client mutations go through `src/hooks/use-week.ts`. `togglePin` updates the UI 
 | `/api/plan` | POST | `{ date, startMin, endMin }` → breakdown |
 | `/api/schedule/adjust` | POST | `{ message, history, now }` |
 | `/api/schedule/apply` | POST | `{ changes }` |
-| `/api/reflect` | POST | reflection for `today` |
+| `/api/reflect` | POST | reflection for `{ today, minute }` (client-local time) |
 | `/api/settings` | PUT | partial settings. **`screenTimeEnabled` is forced `false`.** |
 | `/api/tts` | POST | `{ text }` → audio/mpeg, or 501 |
 | `/api/reset` | POST | rebuild the demo week |
@@ -197,6 +200,7 @@ npm install
 cp .env.example .env.local   # optional
 npm run dev                  # http://localhost:4317
 npx tsc --noEmit
+npm test                     # regression tests for core behavior
 npm run lint
 ```
 

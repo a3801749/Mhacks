@@ -89,6 +89,12 @@ export interface WeekData {
   source: "neon" | "memory"
 }
 
+/** Exact provenance for reversing blocks added by one scheduling operation. */
+export interface AppliedWeek extends WeekData {
+  createdEventIds: string[]
+  previousEvents: CalendarEvent[]
+}
+
 export type ChangeAction = "move" | "shorten" | "skip" | "create"
 
 export interface ScheduleChange {
