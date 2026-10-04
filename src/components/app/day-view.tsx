@@ -183,14 +183,18 @@ function Gap({ minutes, onAdd, trailing, leading, nowLine }: {
   minutes: number; onAdd?: () => void; trailing?: boolean; leading?: boolean; nowLine?: number
 }) {
   const height = leading ? 56 : Math.min(120, Math.max(onAdd ? 72 : 20, minutes * PX_PER_MIN * 0.45))
+  const label = !trailing && !leading && minutes >= 30 ? `${formatDuration(minutes)} of breathing room` : null
   return (
-    <div className="group relative flex flex-col items-center justify-center gap-2 py-3" style={{ minHeight: height }}>
-      {nowLine !== undefined && <div className="w-full"><NowLine minute={nowLine} /></div>}
-      {/* Opacity, not display, keeps the button reachable by Tab; touch screens have no hover. */}
-      {onAdd ? <button type="button" onClick={onAdd} className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-secondary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring [@media(hover:none)]:opacity-100">
-        <Plus className="size-3.5" /> {leading ? "Add something before this" : "Add something here"}
-      </button> : null}
-      {!trailing && !leading && minutes >= 30 && <p className="text-center text-xs text-muted-foreground">{formatDuration(minutes)} of breathing room</p>}
+    <div className="group relative flex flex-col justify-center py-3" style={{ minHeight: height }}>
+      {nowLine !== undefined && <NowLine minute={nowLine} />}
+      {/* Label and button share one grid cell so hovering swaps them in place. Opacity, not display,
+          keeps the button reachable by Tab; touch screens have no hover, so they show the button. */}
+      {(label || onAdd) && <div className="grid flex-1 place-items-center">
+        {label && <p className={cn("col-start-1 row-start-1 text-xs text-muted-foreground transition-opacity", onAdd && "group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-0")}>{label}</p>}
+        {onAdd && <button type="button" onClick={onAdd} className="col-start-1 row-start-1 flex items-center gap-1.5 rounded-md border border-primary/30 bg-card px-3 py-1.5 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-secondary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring [@media(hover:none)]:opacity-100">
+          <Plus className="size-3.5" /> {leading ? "Add something before this" : "Add something here"}
+        </button>}
+      </div>}
     </div>
   )
 }
