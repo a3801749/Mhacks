@@ -3,32 +3,11 @@
 import { ArrowRight, Check, Loader2, RotateCcw, Undo2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { describeChange } from "@/lib/describe"
+import type { ProposalItem } from "@/lib/proposals"
 import { applyChanges } from "@/lib/schedule"
 import { formatRange, monthDay, weekdayShort } from "@/lib/time"
-import type { AppliedWeek, CalendarEvent, ScheduleChange } from "@/lib/types"
+import type { CalendarEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
-
-export type ProposalState = "pending" | "applied" | "declined"
-
-export interface ProposalItem {
-  change: ScheduleChange
-  state: ProposalState
-  /** The calendar before this item was applied, used to describe and undo it. */
-  before?: CalendarEvent[]
-  createdEventIds?: string[]
-}
-
-/** The store reports created ids unordered, so pair each create with the block it produced. */
-export function createdIdsByChange(changes: ScheduleChange[], week: AppliedWeek): string[][] {
-  const unclaimed = new Set(week.createdEventIds)
-  return changes.map((c) => {
-    if (c.action !== "create") return []
-    const hit = week.events.find((e) => unclaimed.has(e.id) && e.date === c.date && e.startMin === c.startMin && e.endMin === c.endMin)
-    if (!hit) return []
-    unclaimed.delete(hit.id)
-    return [hit.id]
-  })
-}
 
 export function ProposalCard({ items, events, busy, applying, onApply, onDecline, onRestore, onUndo }: {
   items: ProposalItem[]

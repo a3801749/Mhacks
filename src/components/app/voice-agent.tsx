@@ -8,21 +8,17 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AGENT_NAME, GUIDANCE_MODES } from "@/lib/brand"
 import { describeChange } from "@/lib/describe"
-import type { AdjustResponse, AppliedWeek, ChatTurn, Integrations, ScheduleChange, WeekData } from "@/lib/types"
+import { appliedProposalItems, type ProposalItem, type ProposalState } from "@/lib/proposals"
+import type { AdjustResponse, AppliedWeek, ChatTurn, Integrations, WeekData } from "@/lib/types"
 import { scheduleUndo } from "@/lib/undo"
 import { cn } from "@/lib/utils"
 import { request, type WeekApi } from "@/hooks/use-week"
-import { createdIdsByChange, ProposalCard, type ProposalItem, type ProposalState } from "./proposal-card"
+import { ProposalCard } from "./proposal-card"
 
 interface AgentTurn extends ChatTurn {
   id: number
   items?: ProposalItem[]
   source?: AdjustResponse["source"]
-}
-
-function appliedItems(changes: ScheduleChange[], week: AppliedWeek): ProposalItem[] {
-  const created = createdIdsByChange(changes, week)
-  return changes.map((change, i) => ({ change, state: "applied", before: week.previousEvents, createdEventIds: created[i] }))
 }
 
 const QUICK_PROMPTS = [
@@ -160,7 +156,7 @@ export function VoiceAgent({
             role: "agent",
             text: res.reply,
             items: res.autoApplied && res.week
-              ? appliedItems(res.changes, res.week)
+              ? appliedProposalItems(res.changes, res.week)
               : res.changes.map((change) => ({ change, state: "pending" })),
             source: res.source,
           },
@@ -247,7 +243,7 @@ export function VoiceAgent({
       const one = changes.length === 1 ? describeChange(changes[0], data.events) : null
       const ok = await api.applyChanges(changes, one ? `${one.verb === "Add" ? "Added" : "Updated"} ${one.title}` : "Done — your calendar shifted")
       if (!ok) return
-      const applied = appliedItems(changes, ok)
+      const applied = appliedProposalItems(changes, ok)
       patchItems(turn.id, (items) => items.map((item, i) => (indices.includes(i) ? applied[indices.indexOf(i)] : item)))
     } finally {
       setApplying(null)
@@ -268,6 +264,8 @@ export function VoiceAgent({
       }
       toast.success("Put back the way it was")
       patchItems(turn.id, (items) => items.map((x, i) => (i === index ? { change: x.change, state: "pending" } : x)))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't undo this change")
     } finally {
       setApplying(null)
     }

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
 import { beforeEach, test } from "node:test"
 import { memoryStore } from "../src/lib/store/memory"
+import { appliedProposalItems, createdIdsByChange } from "../src/lib/proposals"
+import { applyChanges } from "../src/lib/schedule"
 import { scheduleUndo } from "../src/lib/undo"
 import type { ScheduleChange } from "../src/lib/types"
-import { event } from "./fixtures"
+import { event, week } from "./fixtures"
 
 beforeEach(() => memoryStore.reset("2026-10-03"))
 
@@ -38,7 +40,41 @@ test("Undo preserves the status implied by work logged after a move", () => {
   const before = event({ id: "e", date: "2026-10-03", startMin: 600, endMin: 660, status: "planned" as const,
     actualMinutes: 0, kind: "work" as const, taskId: null, projectId: null, title: "Focus",
     movedFromDate: null, movedFromStartMin: null })
-  const result = scheduleUndo([before], [{ ...before, actualMinutes: 15, status: "partial" }],
-    [{ action: "move", eventId: "e", reason: "Move" }], [])
+  const change: ScheduleChange = { action: "move", eventId: "e", startMin: 700, endMin: 760, reason: "Move" }
+  const [moved] = applyChanges([before], [change])
+  const result = scheduleUndo([before], [{ ...moved, actualMinutes: 15, status: "partial" }], [change], [])
   assert.equal(result.restore[0].patch.status, "partial")
+})
+
+test("individual Undo matches same-time created blocks by their identity", () => {
+  const changes: ScheduleChange[] = [
+    { action: "create", title: "Dinner", date: "2026-10-06", startMin: 700, endMin: 760, kind: "life", reason: "Add" },
+    { action: "create", title: "Make-up work", date: "2026-10-06", startMin: 700, endMin: 760, taskId: "t", reason: "Add" },
+  ]
+  const events = applyChanges([], changes)
+  events[1].projectId = "p"
+  const ids = createdIdsByChange(changes, { ...week(), events: [...events].reverse(), createdEventIds: events.map((e) => e.id).reverse(), previousEvents: [] })
+  assert.deepEqual(ids, events.map((e) => [e.id]))
+})
+
+test("undoing the later item in a batch preserves an earlier shortening", () => {
+  const before = event()
+  const changes: ScheduleChange[] = [
+    { action: "shorten", eventId: before.id, endMin: 630, reason: "Shorter" },
+    { action: "move", eventId: before.id, date: "2026-10-06", startMin: 700, endMin: 730, reason: "Move" },
+  ]
+  const current = applyChanges([before], changes)
+  const items = appliedProposalItems(changes, { ...week(), events: current, createdEventIds: [], previousEvents: [before] })
+  const undo = scheduleUndo(items[1].before!, current, [items[1].change], [])
+  assert.equal(undo.restore[0].patch.date, before.date)
+  assert.equal(undo.restore[0].patch.endMin, 630)
+  assert.throws(() => scheduleUndo(items[0].before!, current, [items[0].change], []), /changed after this proposal/)
+})
+
+test("an older Undo cannot overwrite a later move or explicit completion", () => {
+  const before = event()
+  const move: ScheduleChange = { action: "move", eventId: before.id, startMin: 700, endMin: 760, reason: "Move" }
+  const moved = applyChanges([before], [move])
+  assert.throws(() => scheduleUndo([before], [{ ...moved[0], startMin: 800, endMin: 860 }], [move], []), /changed after this proposal/)
+  assert.throws(() => scheduleUndo([before], [{ ...moved[0], status: "completed" }], [move], []), /changed after this proposal/)
 })
