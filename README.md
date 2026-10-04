@@ -57,6 +57,7 @@ The settings dialog (top-right mode button) shows which services are live and ha
 - [`docs/onboarding.md`](docs/onboarding.md): the onboarding flow (live at `/welcome`) and the reasoning behind it
 - [`docs/planning-changes.md`](docs/planning-changes.md): changes from the planning review, verification actions, and current limits
 - [`docs/product-readiness-review.md`](docs/product-readiness-review.md): incoming commit coverage, necessary corrections, verification, and remaining limits
+- [`docs/tilly-response-diagnosis.md`](docs/tilly-response-diagnosis.md): lunch-request failures, app/Gemini findings, corrections, and regression checks
 - [`docs/screen-time-extension.md`](docs/screen-time-extension.md): how to build the screen-time browser extension
 
 ## Team handoff notes
