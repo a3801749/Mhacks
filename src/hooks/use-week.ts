@@ -135,8 +135,8 @@ export function useWeek(today: string | null) {
       ),
     updateEvent: (eventId: string, patch: EventPatch, msg?: string) =>
       mutate(() => request<WeekData>(`/api/events/${eventId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
-    createSeries: (input: NewSeries, replaceEventId?: string) =>
-      mutate(() => request<WeekData>("/api/event-series", { method: "POST", body: json({ ...input, today, replaceEventId }) }), "Repeating event added"),
+    createSeries: (input: NewSeries, replaceEventId?: string, msg: string | undefined = "Repeating event added") =>
+      mutate(() => request<WeekData>("/api/event-series", { method: "POST", body: json({ ...input, today, replaceEventId }) }), msg),
     editSeries: (eventId: string, input: NewSeries, scope: "following" | "all") =>
       mutate(() => request<WeekData>(`/api/events/${eventId}/series`, { method: "PATCH", body: json({ ...input, scope, today }) }), "Repeating events updated"),
     removeEvents: (eventId: string, scope: SeriesScope) =>

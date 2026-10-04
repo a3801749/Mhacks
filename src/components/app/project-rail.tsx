@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, GripVertical, Pin, Sparkles } from "lucide-react"
+import { ArrowRight, GripVertical, Pin, Plus, Sparkles } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AGENT_NAME, ASSIGNMENT_TYPES } from "@/lib/brand"
 import { pinPreferenceLabel, pinPreferences, projectHealth, type ProjectHealth } from "@/lib/analytics"
@@ -64,9 +64,12 @@ export function ProjectRail({
       </div>
 
       <div className="flex min-h-0 flex-col">
-        <SectionLabel>Classes</SectionLabel>
+        <div className="flex items-baseline justify-between gap-2">
+          <SectionLabel>Classes</SectionLabel>
+          <AddClassButton />
+        </div>
         {classes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No open assignments. Add one with “New assignment”.</p>
+          <p className="text-sm text-muted-foreground">No open assignments yet. Add your class schedule, or an assignment with “New assignment”.</p>
         ) : (
           <ScrollArea className={scrollArea}>
             <ul className="divide-y rounded-lg border bg-card">
@@ -123,6 +126,15 @@ export function ProjectRail({
         </p>
       )}
     </section>
+  )
+}
+
+function AddClassButton() {
+  const { addCourse } = useApp()
+  return (
+    <button type="button" onClick={addCourse} className="mb-1.5 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+      <Plus className="size-3" /> Add class
+    </button>
   )
 }
 

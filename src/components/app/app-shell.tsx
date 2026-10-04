@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, Anchor, CalendarDays, CalendarRange, GanttChart, Lighthouse, ListTodo, Plus, RefreshCw, Sun, Waves } from "lucide-react"
+import { Activity, Anchor, CalendarDays, CalendarRange, GanttChart, GraduationCap, Lighthouse, ListTodo, Plus, RefreshCw, Sun, Waves } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AGENT_NAME, APP_NAME, APP_TAGLINE, GUIDANCE_MODES } from "@/lib/brand"
@@ -11,6 +11,7 @@ import type { CalendarEvent, Integrations, Project, WeekData } from "@/lib/types
 import { cn } from "@/lib/utils"
 import { useClock, useWeek, type WeekApi } from "@/hooks/use-week"
 import { BlockDialog } from "./block-dialog"
+import { CourseDialog } from "./course-dialog"
 import { ProjectDialog } from "./project-dialog"
 import { SettingsDialog } from "./settings-dialog"
 import { TillyOrb, VoiceAgent } from "./voice-agent"
@@ -24,6 +25,7 @@ interface AppContextValue {
   openBlock: (event: CalendarEvent) => void
   askAgent: (message: string) => void
   editProject: (project: Project | "new") => void
+  addCourse: () => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -54,6 +56,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [queued, setQueued] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [project, setProject] = useState<Project | "new" | null>(null)
+  const [courseOpen, setCourseOpen] = useState(false)
+  const addCourse = useCallback(() => setCourseOpen(true), [])
 
   const askAgent = useCallback((message: string) => {
     setQueued(message)
@@ -84,6 +88,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               return <Icon />
             })()}
             <span className="hidden sm:inline">{GUIDANCE_MODES[data.settings.guidanceMode].label} mode</span>
+          </Button>
+        )}
+        {data && (
+          <Button variant="outline" size="sm" onClick={addCourse} className="gap-1.5" aria-label="Add a class">
+            <GraduationCap />
+            <span className="hidden lg:inline">Add class</span>
           </Button>
         )}
         {data && (
@@ -148,6 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     openBlock: setOpenEvent,
     askAgent,
     editProject: setProject,
+    addCourse,
   }
 
   return (
@@ -192,6 +203,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           api={api}
           integrations={integrations}
         />
+        <CourseDialog open={courseOpen} onClose={() => setCourseOpen(false)} />
         <ProjectDialog project={project} onClose={() => setProject(null)} data={data} api={api} today={now.date} />
       </Paper>
     </AppContext.Provider>
