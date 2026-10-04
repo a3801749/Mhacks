@@ -51,7 +51,7 @@ export function useWeek(today: string | null) {
       loadedThrough.current = addDays(today, 366)
       if (week.integrations) setIntegrations(week.integrations)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't load your calendar")
+      if (version === revision.current) setError(err instanceof Error ? err.message : "Couldn't load your calendar")
     }
   }, [today])
 
@@ -63,15 +63,17 @@ export function useWeek(today: string | null) {
   const mutate = useCallback(<T extends WeekData,>(fn: () => Promise<T>, success?: string): Promise<T | null> => {
     revision.current += 1
     const operation = mutationQueue.current.then(async () => {
-    try {
-      const next = await fn()
-      setData((prev) => ({ ...next, integrations: prev?.integrations }))
-      if (success) toast.success(success)
-      return next
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "That didn't save")
-      return null
-    }
+      try {
+        const next = await fn()
+        // Also invalidate reads that started while this write was in flight.
+        revision.current += 1
+        setData((prev) => ({ ...next, integrations: prev?.integrations }))
+        if (success) toast.success(success)
+        return next
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "That didn't save")
+        return null
+      }
     })
     mutationQueue.current = operation
     return operation
@@ -97,7 +99,10 @@ export function useWeek(today: string | null) {
     integrations,
     reload: load,
     ensureThrough,
-    replace: (next: WeekData) => setData((prev) => ({ ...next, integrations: prev?.integrations })),
+    replace: (next: WeekData) => {
+      revision.current += 1
+      setData((prev) => ({ ...next, integrations: prev?.integrations }))
+    },
     logTime: (eventId: string, minutes: number, note: string) =>
       mutate(
         () => request<WeekData>(`/api/events/${eventId}/log`, { method: "POST", body: json({ minutes, note }) }),
@@ -136,7 +141,7 @@ export function useWeek(today: string | null) {
     applyChanges: (changes: ScheduleChange[], msg = "Schedule updated") =>
       mutate(() => request<AppliedWeek>(`/api/schedule/apply`, { method: "POST", body: json({ changes, today }) }), msg),
     updateSettings: (patch: Partial<Settings>) =>
-      mutate(() => request<WeekData>(`/api/settings`, { method: "PUT", body: json(patch) })),
+      mutate(() => request<WeekData>(`/api/settings`, { method: "PUT", body: json({ ...patch, today }) })),
     updateProject: (projectId: string, patch: ProjectPatch, msg?: string) =>
       mutate(() => request<WeekData>(`/api/projects/${projectId}`, { method: "PATCH", body: json({ ...patch, today }) }), msg),
     togglePin: (projectId: string, pinned: boolean) => {

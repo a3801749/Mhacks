@@ -1,9 +1,9 @@
 import "server-only"
-import { toDateKey } from "./time"
+import { toDateKey, validDate } from "./time"
 import { RequestError } from "./errors"
 
 export function todayFrom(value: unknown): string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateKey(new Date())
+  return validDate(value) ? value : toDateKey(new Date())
 }
 
 export async function handle<T>(fn: () => Promise<T>) {

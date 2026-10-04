@@ -94,6 +94,9 @@ export const memoryStore: Store = {
     const d = current()
     const event = d.events.find((e) => e.id === eventId)
     if (!event) throw new Error("Event not found")
+    if ((patch.taskId !== undefined && patch.taskId !== event.taskId || patch.projectId !== undefined && patch.projectId !== event.projectId || patch.kind && patch.kind !== event.kind) &&
+      (event.actualMinutes > 0 || d.logs.some((l) => l.eventId === eventId))) throw new RequestError("This block has recorded work. Keep its assignment and type.", 409)
+    if ((patch.endMin ?? event.endMin) <= (patch.startMin ?? event.startMin)) throw new RequestError("End time must be after the start")
     Object.assign(event, patch)
     if (event.seriesId) {
       if (patch.isException === undefined) event.isException = true

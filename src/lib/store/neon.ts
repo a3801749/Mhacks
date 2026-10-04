@@ -63,7 +63,7 @@ async function seed(sql: Sql, today: string) {
         sql`INSERT INTO tasks (id, project_id, title, estimate_minutes, done)
             VALUES (${t.id}, ${t.projectId}, ${t.title}, ${t.estimateMinutes}, ${t.done})`,
     ),
-    ...s.events.map((e) => insertEvent(sql, e)),
+    insertEvents(sql, s.events),
     ...s.logs.map(
       (l) =>
         sql`INSERT INTO time_logs (id, task_id, event_id, minutes, note, created_at)
@@ -75,22 +75,32 @@ async function seed(sql: Sql, today: string) {
   ])
 }
 
-function insertEvent(sql: Sql, e: CalendarEvent) {
+function eventRows(events: CalendarEvent[]) {
+  return events.map((e) => ({ id: e.id, project_id: e.projectId, task_id: e.taskId, title: e.title,
+    date: e.date, start_min: e.startMin, end_min: e.endMin, status: e.status, actual_minutes: e.actualMinutes,
+    kind: e.kind, moved_from_date: e.movedFromDate, moved_from_start_min: e.movedFromStartMin,
+    location: e.location, meeting_url: e.meetingUrl, notes: e.notes, series_id: e.seriesId,
+    occurrence_date: e.occurrenceDate, is_exception: e.isException }))
+}
+
+function insertEvents(sql: Sql, events: CalendarEvent[]) {
   return sql`INSERT INTO events (id, user_id, project_id, task_id, title, date, start_min, end_min, status,
-                                 actual_minutes, kind, moved_from_date, moved_from_start_min, location, meeting_url, notes, series_id, occurrence_date, is_exception)
-             VALUES (${e.id}, ${USER_ID}, ${e.projectId}, ${e.taskId}, ${e.title}, ${e.date}, ${e.startMin},
-                     ${e.endMin}, ${e.status}, ${e.actualMinutes}, ${e.kind}, ${e.movedFromDate},
-                     ${e.movedFromStartMin}, ${e.location}, ${e.meetingUrl}, ${e.notes}, ${e.seriesId}, ${e.occurrenceDate}, ${e.isException})
-             ON CONFLICT (id) DO UPDATE SET
-               date = EXCLUDED.date, start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min,
-               status = CASE WHEN events.actual_minutes > 0 AND EXCLUDED.status <> 'skipped'
-                 THEN CASE WHEN events.actual_minutes >= EXCLUDED.end_min - EXCLUDED.start_min THEN 'completed' ELSE 'partial' END
-                 ELSE EXCLUDED.status END,
-               title = EXCLUDED.title, project_id = EXCLUDED.project_id, task_id = EXCLUDED.task_id, kind = EXCLUDED.kind,
-               location = EXCLUDED.location, meeting_url = EXCLUDED.meeting_url, notes = EXCLUDED.notes,
-               series_id = EXCLUDED.series_id, occurrence_date = EXCLUDED.occurrence_date, is_exception = EXCLUDED.is_exception,
-               moved_from_date = EXCLUDED.moved_from_date,
-               moved_from_start_min = EXCLUDED.moved_from_start_min`
+    actual_minutes, kind, moved_from_date, moved_from_start_min, location, meeting_url, notes, series_id, occurrence_date, is_exception)
+    SELECT r.id, ${USER_ID}, r.project_id, r.task_id, r.title, r.date, r.start_min, r.end_min, r.status,
+      r.actual_minutes, r.kind, r.moved_from_date, r.moved_from_start_min, r.location, r.meeting_url, r.notes, r.series_id, r.occurrence_date, r.is_exception
+    FROM jsonb_to_recordset(${JSON.stringify(eventRows(events))}::jsonb) AS r(
+      id text, project_id text, task_id text, title text, date date, start_min int, end_min int, status text,
+      actual_minutes int, kind text, moved_from_date date, moved_from_start_min int, location text,
+      meeting_url text, notes text, series_id text, occurrence_date date, is_exception boolean)
+    ON CONFLICT (id) DO UPDATE SET
+      date = EXCLUDED.date, start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min,
+      status = CASE WHEN events.actual_minutes > 0 AND EXCLUDED.status <> 'skipped'
+        THEN CASE WHEN events.actual_minutes >= EXCLUDED.end_min - EXCLUDED.start_min THEN 'completed' ELSE 'partial' END
+        ELSE EXCLUDED.status END,
+      title = EXCLUDED.title, project_id = EXCLUDED.project_id, task_id = EXCLUDED.task_id, kind = EXCLUDED.kind,
+      location = EXCLUDED.location, meeting_url = EXCLUDED.meeting_url, notes = EXCLUDED.notes,
+      series_id = EXCLUDED.series_id, occurrence_date = EXCLUDED.occurrence_date, is_exception = EXCLUDED.is_exception,
+      moved_from_date = EXCLUDED.moved_from_date, moved_from_start_min = EXCLUDED.moved_from_start_min`
 }
 
 async function load(): Promise<WeekData> {
@@ -188,22 +198,29 @@ async function saveSeriesState(before: WeekData, next: Pick<WeekData, "events" |
   const previous = new Map(before.events.map((e) => [e.id, JSON.stringify(e)]))
   const retained = new Set(next.events.map((e) => e.id))
   const seriesIds = new Set(next.series.map((s) => s.id))
+  const removed = before.events.filter((e) => !retained.has(e.id))
+  const dirty = next.events.filter((e) => previous.get(e.id) !== JSON.stringify(e))
   try {
   await sql.transaction([
     sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
     sql`SELECT 1 / CASE WHEN COALESCE((SELECT jsonb_object_agg(id, definition) FROM event_series WHERE user_id = ${USER_ID}), '{}'::jsonb)
       = ${JSON.stringify(Object.fromEntries(before.series.map((s) => [s.id, s])))}::jsonb THEN 1 ELSE 0 END AS unchanged`,
-    ...before.events.filter((e) => !retained.has(e.id)).map((e) => sql`WITH locked AS (
-      SELECT * FROM events WHERE id = ${e.id} AND user_id = ${USER_ID} FOR UPDATE
-    ) SELECT 1 / CASE WHEN EXISTS (SELECT 1 FROM locked WHERE actual_minutes = 0 AND kind = ${e.kind}
-      AND status = ${e.status} AND date = ${e.date}::date AND start_min = ${e.startMin} AND end_min = ${e.endMin}
-      AND title = ${e.title} AND location = ${e.location} AND meeting_url = ${e.meetingUrl} AND notes = ${e.notes})
-      AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${e.id}) THEN 1 ELSE 0 END AS unchanged`),
+    sql`WITH expected AS (
+      SELECT * FROM jsonb_to_recordset(${JSON.stringify(eventRows(removed))}::jsonb) AS r(
+        id text, project_id text, task_id text, title text, date date, start_min int, end_min int, status text,
+        actual_minutes int, kind text, moved_from_date date, moved_from_start_min int, location text,
+        meeting_url text, notes text, series_id text, occurrence_date date, is_exception boolean)
+    ), locked AS MATERIALIZED (
+      SELECT e.* FROM events e JOIN expected x ON e.id = x.id WHERE e.user_id = ${USER_ID} FOR UPDATE OF e
+    ) SELECT 1 / CASE WHEN (SELECT count(*) FROM locked) = ${removed.length}
+      AND NOT EXISTS (SELECT 1 FROM locked e JOIN expected x ON e.id = x.id
+        WHERE e.actual_minutes <> 0 OR ROW(e.title, e.date, e.start_min, e.end_min, e.status, e.kind, e.project_id, e.task_id, e.location, e.meeting_url, e.notes)
+          IS DISTINCT FROM ROW(x.title, x.date, x.start_min, x.end_min, x.status, x.kind, x.project_id, x.task_id, x.location, x.meeting_url, x.notes)
+          OR EXISTS (SELECT 1 FROM time_logs WHERE event_id = e.id)) THEN 1 ELSE 0 END AS unchanged`,
     ...next.series.filter((s) => JSON.stringify(s) !== JSON.stringify(before.series.find((p) => p.id === s.id))).map((s) => sql`INSERT INTO event_series (id, user_id, definition) VALUES (${s.id}, ${USER_ID}, ${JSON.stringify(s)}::jsonb)
       ON CONFLICT (id) DO UPDATE SET definition = EXCLUDED.definition`),
-    ...before.events.filter((e) => !retained.has(e.id)).map((e) => sql`DELETE FROM events WHERE id = ${e.id} AND user_id = ${USER_ID}
-      AND actual_minutes = 0 AND NOT EXISTS (SELECT 1 FROM time_logs WHERE event_id = ${e.id})`),
-    ...next.events.filter((e) => previous.get(e.id) !== JSON.stringify(e)).map((e) => insertEvent(sql, e)),
+    sql`DELETE FROM events WHERE user_id = ${USER_ID} AND id = ANY(${removed.map((e) => e.id)}::text[])`,
+    insertEvents(sql, dirty),
     ...before.series.filter((s) => !seriesIds.has(s.id)).map((s) => sql`DELETE FROM event_series WHERE id = ${s.id} AND user_id = ${USER_ID}`),
   ])
   } catch (err) {
@@ -226,12 +243,14 @@ export const neonStore: Store = {
       const { sql } = client()
       await sql.transaction([
         sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
-        ...added.map((e) => sql`INSERT INTO events
+        sql`INSERT INTO events
           (id, user_id, title, date, start_min, end_min, kind, location, meeting_url, notes, series_id, occurrence_date)
-          SELECT ${e.id}, ${USER_ID}, ${e.title}, ${e.date}::date, ${e.startMin}, ${e.endMin}, 'life', ${e.location}, ${e.meetingUrl}, ${e.notes}, ${e.seriesId}, ${e.occurrenceDate}::date
-          FROM event_series WHERE id = ${e.seriesId} AND user_id = ${USER_ID}
-            AND definition = ${JSON.stringify(week.series.find((s) => s.id === e.seriesId))}::jsonb
-          ON CONFLICT DO NOTHING`),
+          SELECT e.id, ${USER_ID}, e.title, e.date, e.start_min, e.end_min, 'life', e.location, e.meeting_url, e.notes, e.series_id, e.occurrence_date
+          FROM jsonb_to_recordset(${JSON.stringify(eventRows(added))}::jsonb) AS e(
+            id text, title text, date date, start_min int, end_min int, location text, meeting_url text, notes text, series_id text, occurrence_date date)
+          JOIN event_series s ON s.id = e.series_id AND s.user_id = ${USER_ID}
+          WHERE s.definition = (${JSON.stringify(Object.fromEntries(week.series.map((s) => [s.id, s])))}::jsonb -> e.series_id)
+          ON CONFLICT DO NOTHING`,
       ])
     }
     return load()
@@ -418,7 +437,7 @@ export const neonStore: Store = {
       sql`SELECT pg_advisory_xact_lock(hashtext(${`andy-calendar:${USER_ID}`}))`,
       ...[...new Set(dirty.map((e) => e.seriesId).filter((id) => id !== null))].map((id) => sql`UPDATE event_series
         SET definition = jsonb_set(definition, '{revision}', to_jsonb(COALESCE((definition->>'revision')::int, 0) + 1)) WHERE id = ${id}`),
-      ...dirty.map((e) => insertEvent(sql, e)),
+      insertEvents(sql, dirty),
     ])
     const changedIds = new Set(changes.map((c) => c.eventId))
     return { ...await load(), createdEventIds: next.filter((e) => !before.has(e.id)).map((e) => e.id),

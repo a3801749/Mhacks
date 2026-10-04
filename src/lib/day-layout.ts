@@ -6,9 +6,9 @@ export function bookedMinutes(events: CalendarEvent[], date: string) {
     .reduce((sum, e) => sum + e.endMin - e.startMin, 0)
 }
 
-/** Use the occupied frontier, rather than the last block, when blocks overlap. */
+/** Use the furthest visible block end when laying out overlapping or skipped cards. */
 export function gapBefore(events: CalendarEvent[], index: number) {
-  return Math.max(0, ...events.slice(0, index).filter((e) => e.status !== "skipped").map((e) => e.endMin))
+  return Math.max(0, ...events.slice(0, index).map((e) => e.endMin))
 }
 
 export function addableSlot(start: number, end: number, nowMinute?: number) {

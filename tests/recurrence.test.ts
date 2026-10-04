@@ -88,6 +88,42 @@ test("invalid rules, unsafe links, and reassignment of recorded work are rejecte
   assert.equal(validateEventPatch({ date: "2026-10-04" }, data, "e").movedFromDate, today)
 })
 
+test("a moved exception outside a changed weekday pattern still consumes one occurrence", () => {
+  const s = series()
+  s.rule = { ...s.rule, frequency: "weekly", weekdays: [1, 3], end: { type: "count", count: 4 } }
+  s.startDate = "2026-10-05"
+  const events = materializeSeries([], [s], "2026-11-01")
+  events[0] = { ...events[0], date: "2026-10-06", isException: true }
+  const next = changeSeries(week({ series: [s], events }), events[0].id, { ...s, startDate: "2026-10-06" }, "following", "split", today)
+  assert.equal(next.events.length, 4)
+  assert.equal(next.events.filter((e) => e.date === "2026-10-06").length, 1)
+  assert.equal(materializeSeries(next.events, next.series, "2027-11-01").length, 4)
+})
+
+test("shifting a series with preserved history creates no colliding occurrence IDs", () => {
+  const s = series()
+  const events = materializeSeries([], [s], "2026-10-10")
+  const next = changeSeries(week({ series: [s], events }), events[2].id, { ...s, startDate: "2026-10-04" }, "all", "new-generation", "2026-10-05")
+  assert.equal(new Set(next.events.map((e) => e.id)).size, next.events.length)
+  assert.equal(next.events.length, 5)
+})
+
+test("ongoing repeats expand on demand without duplicating skipped occurrences", () => {
+  const s = series()
+  s.rule.end = { type: "never" }
+  const initial = materializeSeries([], [s], "2026-10-05")
+  initial[1] = { ...initial[1], status: "skipped", isException: true }
+  const expanded = materializeSeries(initial, [s], "2026-10-08")
+  assert.equal(expanded.length, 6)
+  assert.equal(expanded.find((e) => e.occurrenceDate === "2026-10-04")?.status, "skipped")
+})
+
+test("daily wall-clock occurrences stay on calendar days across daylight saving changes", () => {
+  const s = series({ startDate: "2026-10-31" })
+  assert.deepEqual(occurrenceDates(s, "2026-11-04"), ["2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"])
+  assert.equal(seriesEvent(s, "2026-11-01").startMin, 600)
+})
+
 test("resizing and restoring logged blocks derive status without changing logs", async () => {
   await memoryStore.reset(today)
   const created = await memoryStore.applyChanges([{ action: "create", kind: "work", date: today, startMin: 600, endMin: 660, taskId: "t-draft", projectId: "p-thesis", reason: "Test" }])
@@ -99,4 +135,20 @@ test("resizing and restoring logged blocks derive status without changing logs",
   data = await memoryStore.updateEvent(id, { status: "planned" })
   assert.equal(data.events.find((e) => e.id === id)?.status, "completed")
   assert.equal(data.logs.filter((l) => l.eventId === id)[0].minutes, 45)
+})
+
+test("focus without a task retains optional associations when edited and signed time is recorded", async () => {
+  await memoryStore.reset(today)
+  const created = await memoryStore.applyChanges([{ action: "create", kind: "work", date: today, startMin: 600, endMin: 660, projectId: "p-thesis", taskId: null, title: "Assignment focus", reason: "Test" }])
+  const id = created.createdEventIds[0]
+  await memoryStore.logTime(id, 45, "")
+  let data = await memoryStore.logTime(id, -15, "")
+  const patch = validateEventPatch({ title: "Renamed focus", endMin: 630, projectId: "p-thesis", taskId: null }, data, id)
+  data = await memoryStore.updateEvent(id, patch)
+  const focus = data.events.find((e) => e.id === id)!
+  assert.equal(focus.projectId, "p-thesis")
+  assert.equal(focus.taskId, null)
+  assert.equal(focus.actualMinutes, 30)
+  assert.equal(focus.status, "completed")
+  assert.throws(() => validateEventPatch({ projectId: null }, data, id), /recorded work/)
 })

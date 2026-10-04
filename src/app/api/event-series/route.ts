@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const today = todayFrom(body?.today)
     const store = getStore()
     const week = await store.getWeek(today)
-    if (week.series.length >= 100) throw new RequestError("At most 100 active repeating series are supported")
+    if (week.series.length >= 100) throw new RequestError("Delete an old repeating series before adding another (100 series are stored)")
     if (body?.replaceEventId !== undefined) {
       const event = week.events.find((e) => e.id === body.replaceEventId)
       if (!event || event.seriesId || event.kind !== "life" || event.status !== "planned" || event.actualMinutes > 0 || week.logs.some((l) => l.eventId === event.id)) {

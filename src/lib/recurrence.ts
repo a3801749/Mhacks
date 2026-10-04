@@ -96,8 +96,18 @@ export function seriesEvent(series: EventSeries, date: string): CalendarEvent {
 export function materializeSeries(events: CalendarEvent[], series: EventSeries[], through: string): CalendarEvent[] {
   const keys = new Set(events.filter((e) => e.seriesId).map((e) => `${e.seriesId}:${e.occurrenceDate}`))
   const next = [...events]
-  for (const s of series) for (const date of occurrenceDates(s, through)) {
-    if (!keys.has(`${s.id}:${date}`)) next.push(seriesEvent(s, date))
+  for (const s of series) {
+    const existing = events.filter((e) => e.seriesId === s.id)
+    const existingDates = new Set(existing.map((e) => e.occurrenceDate))
+    // Preserved exceptions count even if a new rule no longer lands on their date.
+    let remaining = s.rule.end.type === "count"
+      ? Math.max(0, s.rule.end.count - existing.length - s.excludedDates.filter((d) => !existingDates.has(d)).length)
+      : Infinity
+    for (const date of occurrenceDates(s, through)) {
+      if (remaining <= 0) break
+      const key = `${s.id}:${date}`
+      if (!keys.has(key)) { next.push(seriesEvent(s, date)); keys.add(key); remaining-- }
+    }
   }
   return next
 }
